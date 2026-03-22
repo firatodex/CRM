@@ -176,12 +176,33 @@ body {
   box-shadow: 0 2px 8px rgba(0, 102, 204, 0.1);
 }
 
+.card-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
 .card-name {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-dark);
-  margin-bottom: 2px;
 }
+
+.wa-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: #25D366;
+  text-decoration: none;
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.wa-btn:hover { opacity: 1; }
 
 .card-company {
   font-size: 12px;

@@ -5,7 +5,7 @@ import KanbanColumn from './components/KanbanColumn'
 import AddClientModal from './components/AddClientModal'
 import DetailModal from './components/DetailModal'
 import Dashboard from './components/Dashboard'
-import RemindersPanel from './components/RemindersPanel'
+import RemindersView from './components/RemindersView'
 import SearchBar from './components/SearchBar'
 import ActiveDeadPanel from './components/ActiveDeadPanel'
 import { formatCurrency, exportCSV } from './utils'
@@ -19,7 +19,7 @@ export default function App() {
 
   const [showAdd, setShowAdd] = useState(false)
   const [selected, setSelected] = useState(null)
-  const [view, setView] = useState('pipeline') // 'pipeline' | 'dashboard' | 'active' | 'dead'
+  const [view, setView] = useState('pipeline')
   const [searchOpen, setSearchOpen] = useState(false)
   const [draggedClient, setDraggedClient] = useState(null)
 
@@ -67,7 +67,6 @@ export default function App() {
     if (data) setContactLogs(data)
   }
 
-  // Add client (quick add: name + phone only)
   async function handleAdd(form) {
     setSaving(true)
     const payload = {
@@ -97,7 +96,6 @@ export default function App() {
     setShowAdd(false)
   }
 
-  // Save edits
   async function handleSave(form) {
     setSaving(true)
     const payload = {
@@ -128,7 +126,6 @@ export default function App() {
     setSelected(null)
   }
 
-  // Delete client
   async function handleDelete(id) {
     if (!confirm('Remove this client? This cannot be undone.')) return
     setSaving(true)
@@ -139,7 +136,6 @@ export default function App() {
     setSelected(null)
   }
 
-  // Log a contact
   async function handleLogContact(clientId, method, note) {
     const now = new Date().toISOString()
     const { data: logData } = await supabase
@@ -149,7 +145,6 @@ export default function App() {
       .single()
     if (logData) setContactLogs(prev => [logData, ...prev])
 
-    // Update last_contacted_at on the client
     const { data: clientData } = await supabase
       .from('clients')
       .update({ last_contacted_at: now })
@@ -159,7 +154,6 @@ export default function App() {
     if (clientData) setClients(prev => prev.map(c => c.id === clientData.id ? clientData : c))
   }
 
-  // Drag & drop stage change
   const handleDrop = useCallback(async (stageKey) => {
     if (!draggedClient || draggedClient.stage === stageKey) {
       setDraggedClient(null)
@@ -177,13 +171,13 @@ export default function App() {
     setDraggedClient(null)
   }, [draggedClient])
 
-  // Computed stats
+  // Computed
   const pipelineClients = clients.filter(c => !['active', 'dead'].includes(c.stage))
   const activeClients = clients.filter(c => c.stage === 'active')
   const deadClients = clients.filter(c => c.stage === 'dead')
   const totalPipelineRevenue = pipelineClients.reduce((sum, c) => sum + (Number(c.potential_revenue) || 0), 0)
 
-  // Reminders: due today or overdue
+  // Reminders: due today or overdue (only pipeline leads)
   const today = new Date().toISOString().split('T')[0]
   const reminders = clients.filter(c => {
     if (!c.next_action_due || ['active', 'dead'].includes(c.stage)) return false
@@ -198,29 +192,21 @@ export default function App() {
           <span className="topbar-logo">OpsCraft</span>
         </div>
         <nav className="topbar-nav">
-          <button
-            className={`nav-btn ${view === 'pipeline' ? 'active' : ''}`}
-            onClick={() => setView('pipeline')}
-          >
+          <button className={`nav-btn ${view === 'pipeline' ? 'active' : ''}`} onClick={() => setView('pipeline')}>
             Pipeline
           </button>
-          <button
-            className={`nav-btn ${view === 'dashboard' ? 'active' : ''}`}
-            onClick={() => setView('dashboard')}
-          >
+          <button className={`nav-btn ${view === 'reminders' ? 'active' : ''}`} onClick={() => setView('reminders')}>
+            Reminders
+            {reminders.length > 0 && <span className="nav-badge orange">{reminders.length}</span>}
+          </button>
+          <button className={`nav-btn ${view === 'dashboard' ? 'active' : ''}`} onClick={() => setView('dashboard')}>
             Dashboard
           </button>
-          <button
-            className={`nav-btn ${view === 'active' ? 'active' : ''}`}
-            onClick={() => setView('active')}
-          >
+          <button className={`nav-btn ${view === 'active' ? 'active' : ''}`} onClick={() => setView('active')}>
             Active
             {activeClients.length > 0 && <span className="nav-badge green">{activeClients.length}</span>}
           </button>
-          <button
-            className={`nav-btn ${view === 'dead' ? 'active' : ''}`}
-            onClick={() => setView('dead')}
-          >
+          <button className={`nav-btn ${view === 'dead' ? 'active' : ''}`} onClick={() => setView('dead')}>
             Archive
             {deadClients.length > 0 && <span className="nav-badge red">{deadClients.length}</span>}
           </button>
@@ -242,11 +228,6 @@ export default function App() {
           </button>
         </div>
       </div>
-
-      {/* Reminders bar */}
-      {view === 'pipeline' && reminders.length > 0 && (
-        <RemindersPanel reminders={reminders} onCardClick={setSelected} />
-      )}
 
       {/* Main content */}
       <div className="main">
@@ -276,20 +257,14 @@ export default function App() {
               />
             ))}
           </div>
+        ) : view === 'reminders' ? (
+          <RemindersView reminders={reminders} onCardClick={setSelected} />
         ) : view === 'dashboard' ? (
           <Dashboard clients={clients} contactLogs={contactLogs} />
         ) : view === 'active' ? (
-          <ActiveDeadPanel
-            clients={activeClients}
-            type="active"
-            onCardClick={setSelected}
-          />
+          <ActiveDeadPanel clients={activeClients} type="active" onCardClick={setSelected} />
         ) : (
-          <ActiveDeadPanel
-            clients={deadClients}
-            type="dead"
-            onCardClick={setSelected}
-          />
+          <ActiveDeadPanel clients={deadClients} type="dead" onCardClick={setSelected} />
         )}
       </div>
 
@@ -304,11 +279,7 @@ export default function App() {
 
       {/* Modals */}
       {showAdd && (
-        <AddClientModal
-          onSave={handleAdd}
-          onClose={() => setShowAdd(false)}
-          saving={saving}
-        />
+        <AddClientModal onSave={handleAdd} onClose={() => setShowAdd(false)} saving={saving} />
       )}
       {selected && (
         <DetailModal

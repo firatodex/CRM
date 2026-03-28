@@ -29,6 +29,14 @@ export function formatRelativeTime(dateStr) {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
 
+// Full date + time for contact history log entries
+export function formatDateTime(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) +
+    ' · ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+}
+
 export function formatCurrency(amount) {
   if (!amount) return '—'
   const num = Number(amount)

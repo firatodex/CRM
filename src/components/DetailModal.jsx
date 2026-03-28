@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ALL_STAGES, TEMPERATURES, SOURCES } from '../stages'
-import { waLink, formatRelativeTime } from '../utils'
+import { waLink, formatDateTime } from '../utils'
 
 export default function DetailModal({ client, contactLogs, onSave, onDelete, onLogContact, onClose, saving }) {
   const [form, setForm] = useState({ ...client })
@@ -170,7 +170,7 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                   <div key={log.id} className="history-item">
                     <div className="history-method">{log.method}</div>
                     <div className="history-note">{log.note}</div>
-                    <div className="history-time">{formatRelativeTime(log.contacted_at)}</div>
+                    <div className="history-time">{formatDateTime(log.contacted_at)}</div>
                   </div>
                 ))
               )}

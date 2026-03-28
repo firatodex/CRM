@@ -1,19 +1,27 @@
-import { formatDue } from '../utils'
+import { formatDue, formatRelativeTime, formatCurrency, waLink } from '../utils'
+import { TEMPERATURES } from '../stages'
 
-function waLink(phone) {
-  if (!phone) return null
-  const digits = phone.replace(/\D/g, '')
-  return `https://wa.me/91${digits}`
-}
-
-export default function ClientCard({ client, onClick }) {
+export default function ClientCard({ client, onClick, onDragStart }) {
   const due = client.next_action_due ? formatDue(client.next_action_due) : null
   const wa = waLink(client.phone)
+  const temp = TEMPERATURES.find(t => t.key === client.temperature)
+  const lastContact = formatRelativeTime(client.last_contacted_at)
 
   return (
-    <div className="card" onClick={() => onClick(client)}>
-      <div className="card-name-row">
-        <span className="card-name">{client.name}</span>
+    <div
+      className="card"
+      onClick={() => onClick(client)}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move'
+        onDragStart(client)
+      }}
+    >
+      <div className="card-top-row">
+        <div className="card-name-row">
+          {temp && <span className="temp-badge" title={temp.label}>{temp.emoji}</span>}
+          <span className="card-name">{client.name}</span>
+        </div>
         {wa && (
           <a
             href={wa}
@@ -29,15 +37,25 @@ export default function ClientCard({ client, onClick }) {
           </a>
         )}
       </div>
-      <div className="card-company">
-        {[client.company, client.business_type].filter(Boolean).join(' · ')}
-      </div>
+
+      {client.company && (
+        <div className="card-company">
+          {[client.company, client.business_type].filter(Boolean).join(' · ')}
+        </div>
+      )}
+
+      {client.potential_revenue && (
+        <div className="card-revenue">{formatCurrency(client.potential_revenue)}</div>
+      )}
+
       {client.next_action && (
         <div className="card-action">{client.next_action}</div>
       )}
-      {due && (
-        <div className={`card-due ${due.cls}`}>{due.label}</div>
-      )}
+
+      <div className="card-footer">
+        {due && <span className={`card-due ${due.cls}`}>{due.label}</span>}
+        {lastContact && <span className="card-last-contact">Last: {lastContact}</span>}
+      </div>
     </div>
   )
 }

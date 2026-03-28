@@ -1,54 +1,69 @@
-# OpsCraft CRM
+# OpsCraft CRM v2
 
-Kanban-based client pipeline. Built on React + Vite + Supabase.
+Kanban pipeline + dashboard + contact history. Built on React + Vite + Supabase.
 
 ---
 
-## Setup (one time)
+## What's new in v2
 
-### 1. Install dependencies
+- **Drag & drop** between pipeline stages
+- **Contact history** — log every call/WhatsApp/meeting with timestamps
+- **Dashboard** — pipeline value, conversion rate, temperature breakdown, source analysis, alerts
+- **Search** — press `/` to search leads by name, company, phone
+- **Today's reminders** — overdue and due-today actions shown at top
+- **Lead temperature** — hot / warm / cold tags
+- **Potential revenue** — track deal value, see pipeline totals
+- **Source tracking** — where each lead came from
+- **Pain point** field — what problem they need solved
+- **Website** field
+- **Active & Dead** — separate views, off the main board
+- **CSV export** — download all leads
+- **Keyboard shortcuts** — `/` to search, `Esc` to close
+
+---
+
+## Setup
+
+### 1. Install
 ```bash
 npm install
 ```
 
-### 2. Add your Supabase credentials
+### 2. Supabase credentials
 ```bash
 cp .env.example .env.local
 ```
-Open `.env.local` and fill in:
-- `VITE_SUPABASE_URL` → Supabase Dashboard → Project Settings → API → Project URL
-- `VITE_SUPABASE_ANON_KEY` → Supabase Dashboard → Project Settings → API → anon public key
+Fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 
-### 3. Run the database schema
-Go to Supabase → SQL Editor → paste the schema from `schema.sql` → Run.
+### 3. Database
 
-### 4. Start the app
+**Fresh install:** Run `schema.sql` in Supabase → SQL Editor.
+
+**Migrating from v1:** Uncomment the ALTER TABLE statements at the bottom of `schema.sql` and run those instead. This adds new columns without losing your existing data.
+
+### 4. Run
 ```bash
 npm run dev
 ```
-Open http://localhost:5173
-
----
-
-## Deploy to Vercel
-```bash
-npm run build
-```
-Then connect the repo to Vercel. Add the two env vars in Vercel → Project Settings → Environment Variables.
 
 ---
 
 ## File structure
 ```
 src/
-  App.jsx              # Main app, data fetching, state
-  supabase.js          # Supabase client
-  stages.js            # Stage config (labels, colors)
-  utils.js             # Date helpers
-  index.css            # OpsCraft brand system styles
+  App.jsx                    # Main app, state, data fetching
+  supabase.js                # Supabase client
+  stages.js                  # Stage, temperature, source configs
+  utils.js                   # Date formatting, CSV export, helpers
+  index.css                  # Full design system
   components/
-    KanbanColumn.jsx   # One pipeline column
-    ClientCard.jsx     # Individual client card
-    AddClientModal.jsx # Quick-add form
-    DetailModal.jsx    # Full edit form
+    KanbanColumn.jsx         # Pipeline column with drag-drop
+    ClientCard.jsx            # Lead card with temp badge, revenue
+    AddClientModal.jsx        # Quick-add (name + phone minimum)
+    DetailModal.jsx           # Full edit + contact history log
+    SearchBar.jsx             # Spotlight-style search
+    RemindersPanel.jsx        # Today's due/overdue bar
+    Dashboard.jsx             # Metrics, charts, alerts
+    ActiveDeadPanel.jsx       # Table view for active/archived
+schema.sql                   # Supabase table definitions
 ```

@@ -1,13 +1,18 @@
 import { useState } from 'react'
-import { STAGES } from '../stages'
+import { TEMPERATURES, SOURCES } from '../stages'
 import { todayStr } from '../utils'
 
 export default function AddClientModal({ onSave, onClose, saving }) {
   const [form, setForm] = useState({
     name: '',
-    stage: 'lead',
+    phone: '',
+    temperature: '',
+    source: '',
+    company: '',
+    business_type: '',
     next_action: '',
     next_action_due: todayStr(),
+    potential_revenue: '',
   })
   const [nameError, setNameError] = useState(false)
 
@@ -18,15 +23,18 @@ export default function AddClientModal({ onSave, onClose, saving }) {
 
   function handleSave() {
     if (!form.name.trim()) { setNameError(true); return }
-    onSave(form)
+    onSave({
+      ...form,
+      potential_revenue: form.potential_revenue ? Number(form.potential_revenue) : null,
+    })
   }
 
   return (
     <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="modal-title">Add client</div>
+      <div className="modal modal-sm">
+        <div className="modal-title">Add lead</div>
         <div className="callout">
-          Fill the essentials now — add full details later by clicking the card.
+          Name is required. Everything else can be filled later.
         </div>
 
         <div className="field">
@@ -35,16 +43,56 @@ export default function AddClientModal({ onSave, onClose, saving }) {
             className={nameError ? 'error' : ''}
             value={form.name}
             onChange={e => set('name', e.target.value)}
-            placeholder="Full name"
+            placeholder="Person's name"
             autoFocus
           />
         </div>
 
         <div className="field">
-          <label>Stage *</label>
-          <select value={form.stage} onChange={e => set('stage', e.target.value)}>
-            {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-          </select>
+          <label>Phone</label>
+          <input
+            value={form.phone}
+            onChange={e => set('phone', e.target.value)}
+            placeholder="Mobile number"
+            type="tel"
+          />
+        </div>
+
+        <div className="field-row">
+          <div className="field">
+            <label>Temperature</label>
+            <select value={form.temperature} onChange={e => set('temperature', e.target.value)}>
+              <option value="">—</option>
+              {TEMPERATURES.map(t => <option key={t.key} value={t.key}>{t.emoji} {t.label}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Source</label>
+            <select value={form.source} onChange={e => set('source', e.target.value)}>
+              <option value="">—</option>
+              {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="field-row">
+          <div className="field">
+            <label>Company</label>
+            <input
+              value={form.company}
+              onChange={e => set('company', e.target.value)}
+              placeholder="Business name"
+            />
+          </div>
+          <div className="field">
+            <label>Potential revenue (₹)</label>
+            <input
+              value={form.potential_revenue}
+              onChange={e => set('potential_revenue', e.target.value)}
+              placeholder="e.g. 50000"
+              type="number"
+            />
+          </div>
         </div>
 
         <div className="field">
@@ -69,7 +117,7 @@ export default function AddClientModal({ onSave, onClose, saving }) {
           <div className="spacer" />
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : 'Add client'}
+            {saving ? 'Saving...' : 'Add lead'}
           </button>
         </div>
       </div>

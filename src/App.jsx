@@ -49,12 +49,27 @@ export default function App() {
   async function fetchClients() {
     setLoading(true)
     setError(null)
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .order('created_at', { ascending: false })
-    if (error) setError(error.message)
-    else setClients(data || [])
+
+    let allClients = []
+    let from = 0
+    const batchSize = 1000
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(from, from + batchSize - 1)
+
+      if (error) { setError(error.message); break }
+      if (!data || data.length === 0) break
+
+      allClients = [...allClients, ...data]
+      if (data.length < batchSize) break
+      from += batchSize
+    }
+
+    setClients(allClients)
     setLoading(false)
   }
 

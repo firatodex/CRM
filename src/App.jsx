@@ -5,7 +5,6 @@ import KanbanColumn from './components/KanbanColumn'
 import AddClientModal from './components/AddClientModal'
 import DetailModal from './components/DetailModal'
 import Dashboard from './components/Dashboard'
-import RemindersView from './components/RemindersView'
 import TodayView from './components/TodayView'
 import SearchBar from './components/SearchBar'
 import ActiveDeadPanel from './components/ActiveDeadPanel'
@@ -180,10 +179,6 @@ export default function App() {
             Today
             {overdueCount > 0 && <span className="nav-badge red">{overdueCount}</span>}
           </button>
-          <button className={`nav-btn ${view === 'reminders' ? 'active' : ''}`} onClick={() => setView('reminders')}>
-            Follow-ups
-            {overdueCount > 0 && <span className="nav-badge orange">{overdueCount}</span>}
-          </button>
           <button className={`nav-btn ${view === 'dashboard' ? 'active' : ''}`} onClick={() => setView('dashboard')}>
             Dashboard
           </button>
@@ -251,16 +246,7 @@ export default function App() {
           <TodayView
             clients={clients}
             onCardClick={setSelected}
-            onUpdateClient={handleUpdateClient}
-          />
-        ) : view === 'reminders' ? (
-          <RemindersView
-            reminders={clients.filter(c =>
-              !['active','dead'].includes(c.stage) && c.next_action_due && c.next_action_due <= today
-            )}
-            allPipelineClients={pipelineClients}
-            onCardClick={setSelected}
-            onUpdateClient={handleUpdateClient}
+            onDrop={handleDrop}
           />
         ) : view === 'dashboard' ? (
           <Dashboard clients={clients} contactLogs={contactLogs} />

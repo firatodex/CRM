@@ -1453,3 +1453,22 @@ body {
   flex-shrink: 0;
   margin-bottom: 12px;
 }
+
+/* ── Email button — matches WhatsApp style ── */
+.btn-email {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
+  color: #0071E3;
+  background: #E8F2FF;
+  border: 1px solid #B8D4F8;
+  border-radius: var(--radius-xs);
+  padding: 5px 12px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.btn-email:hover { background: #D4E8FF; }

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { ALL_STAGES, TEMPERATURES, SOURCES } from '../stages'
 import { waLink, formatDateTime, todayStr } from '../utils'
 
-const LOG_METHODS = ['Phone call', 'WhatsApp', 'Email', 'In person', 'LinkedIn']
+const LOG_METHODS = ['Phone call', 'WhatsApp', 'Email', 'In person']
 
 function quickDate(daysFromNow) {
   const d = new Date()
@@ -101,7 +101,7 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
               </a>
             )}
             {emailLink && (
-              <a href={emailLink} className="btn btn-secondary btn-sm" onClick={e => e.stopPropagation()}>
+              <a href={emailLink} className="btn btn-email btn-sm" onClick={e => e.stopPropagation()}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
                 </svg>

@@ -149,7 +149,7 @@ body {
   color: var(--text-dark);
 }
 
-.main { flex: 1; padding: 20px 24px 40px; }
+.main { flex: 1; padding: 16px 24px 24px; display: flex; flex-direction: column; min-height: 0; }
 
 /* ═══════════════ BUTTONS ═══════════════ */
 .btn {
@@ -212,13 +212,12 @@ body {
   gap: 12px;
   overflow-x: auto;
   padding-bottom: 8px;
-  align-items: flex-start;
-  max-width: 1000px;
+  align-items: stretch;
+  width: 100%;
 }
 
 .column {
-  min-width: 240px;
-  max-width: 320px;
+  min-width: 220px;
   flex: 1;
   background: var(--bg-white);
   border: 1px solid var(--border-light);
@@ -389,7 +388,7 @@ body {
   border: 1px solid var(--border-light);
   border-radius: var(--radius);
   padding: 20px;
-  max-width: 960px;
+  max-width: 100%;
 }
 
 .reminders-view-header {
@@ -922,7 +921,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-width: 960px;
+  width: 100%;
 }
 
 .dash-hero {
@@ -1422,4 +1421,35 @@ body {
 .dashboard .recharts-tooltip-wrapper {
   border-radius: 8px;
   overflow: hidden;
+}
+
+/* ── Full-width board layout (pipeline + today tabs) ── */
+.app { height: 100vh; overflow: hidden; }
+.main { flex: 1; min-height: 0; }
+
+.board {
+  height: 100%;
+  align-items: stretch;
+}
+.column {
+  height: 100%;
+  min-height: 0;
+}
+
+/* ── Urgent card accent ── */
+.card-urgent {
+  border-color: rgba(255, 59, 48, 0.25);
+}
+
+/* ── Dashboard full width ── */
+.dashboard { max-width: 100% !important; }
+.reminders-view { max-width: 100% !important; }
+
+/* ── Today view header bar ── */
+.today-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  margin-bottom: 12px;
 }

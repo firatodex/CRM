@@ -69,12 +69,23 @@ export default function Dashboard({ clients, contactLogs }) {
   const weekTrend = thisWeekLogs.length - lastWeekLogs.length
 
   // Contact activity — last 30 days
+  // Use local date strings to avoid UTC vs IST timezone mismatch
+  function toLocalDateStr(date) {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const dd = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${dd}`
+  }
+  // Pre-convert all log timestamps to local date strings once
+  const logLocalDates = contactLogs.map(l =>
+    l.contacted_at ? toLocalDateStr(new Date(l.contacted_at)) : null
+  )
   const activityData = []
   for (let i = 29; i >= 0; i--) {
     const d = new Date()
     d.setDate(d.getDate() - i)
-    const dateStr = d.toISOString().split('T')[0]
-    const count = contactLogs.filter(l => l.contacted_at && l.contacted_at.startsWith(dateStr)).length
+    const localDate = toLocalDateStr(d)
+    const count = logLocalDates.filter(ld => ld === localDate).length
     activityData.push({
       date: i === 0 ? 'Today' : i % 7 === 0
         ? d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
@@ -84,7 +95,7 @@ export default function Dashboard({ clients, contactLogs }) {
     })
   }
   const totalThisMonth = activityData.reduce((s, d) => s + d.contacts, 0)
-  const peakDay = Math.max(...activityData.map(d => d.contacts))
+  const peakDay = Math.max(...activityData.map(d => d.contacts), 0)
 
   // Pipeline stage bar chart
   const stageData = PIPELINE_STAGES.map(s => ({

@@ -26,6 +26,20 @@
   --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04);
   --shadow-lg: 0 12px 40px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06);
   --transition: 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+
+  /* ── Semantic aliases used by newer components ──
+     These were referenced in CSS but never defined, causing:
+     - log-method-btn.active and quick-date-btn.active to render as
+       invisible white text on white background
+     - reminder cards, follow-up rows, and next-action summaries to
+       have no background, no text color, no border accent
+     - overdue badges in RemindersView to show no color             */
+  --accent:   #0071E3;   /* same as --primary */
+  --surface:  #FFFFFF;   /* card / panel background */
+  --surface2: #F5F5F7;   /* subtle hover / secondary surface */
+  --text1:    #1D1D1F;   /* primary text (same as --text-dark) */
+  --text2:    #6E6E73;   /* secondary text (same as --text-light) */
+  --danger:   #FF3B30;   /* destructive / overdue (same as --error) */
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }

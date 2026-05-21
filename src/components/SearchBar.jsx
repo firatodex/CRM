@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { ALL_STAGES, TEMPERATURES } from '../stages'
 
 export default function SearchBar({ clients, onSelect, onClose }) {
@@ -11,15 +11,18 @@ export default function SearchBar({ clients, onSelect, onClose }) {
   }, [])
 
   const q = query.toLowerCase().trim()
-  const results = q
-    ? clients.filter(c =>
-        (c.name || '').toLowerCase().includes(q) ||
-        (c.company || '').toLowerCase().includes(q) ||
-        (c.phone || '').includes(q) ||
-        (c.business_type || '').toLowerCase().includes(q) ||
-        (c.pain_point || '').toLowerCase().includes(q)
-      ).slice(0, 10)
-    : []
+  // Memoized so we don't re-scan 900+ clients on every render —
+  // only recomputes when the search query actually changes.
+  const results = useMemo(() => {
+    if (!q) return []
+    return clients.filter(c =>
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.company || '').toLowerCase().includes(q) ||
+      (c.phone || '').includes(q) ||
+      (c.business_type || '').toLowerCase().includes(q) ||
+      (c.pain_point || '').toLowerCase().includes(q)
+    ).slice(0, 10)
+  }, [q, clients])
 
   function handleKey(e) {
     if (e.key === 'ArrowDown') {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { TEMPERATURES, SOURCES } from '../stages'
 import { todayStr } from '../utils'
 
@@ -20,6 +20,19 @@ export default function AddClientModal({ onSave, onClose, saving }) {
     setForm(f => ({ ...f, [key]: val }))
     if (key === 'name') setNameError(false)
   }
+
+  // Submit on Enter (unless inside a textarea), close on Escape
+  useEffect(() => {
+    function handleKey(e) {
+      if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+        e.preventDefault()
+        handleSave()
+      }
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [form])
 
   function handleSave() {
     if (!form.name.trim()) { setNameError(true); return }

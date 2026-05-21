@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { ALL_STAGES, TEMPERATURES, SOURCES } from '../stages'
 import { waLink, formatDateTime, todayStr } from '../utils'
 
@@ -22,9 +22,31 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
   const [showLogForm, setShowLogForm] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
   const firstInputRef = useRef(null)
+  const flashTimerRef = useRef(null)
+
+  // Clear flash timer on unmount to avoid setState-on-unmounted-component
+  useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current) }, [])
+
+  function showFlash() {
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
+    setSavedFlash(true)
+    flashTimerRef.current = setTimeout(() => setSavedFlash(false), 1500)
+  }
 
   // Track whether the form has unsaved changes so we can warn before closing.
-  const isDirty = JSON.stringify(form) !== JSON.stringify(client)
+  // Compare only the editable fields so type coercion (e.g. DB returns
+  // potential_revenue as a number while the input keeps it as a string)
+  // doesn't cause false positives where the form appears dirty immediately.
+  const EDITABLE_FIELDS = [
+    'name','stage','phone','email','company','business_type',
+    'next_action','next_action_due','notes','temperature',
+    'potential_revenue','source','website','pain_point'
+  ]
+  const isDirty = useMemo(() => EDITABLE_FIELDS.some(k => {
+    const a = form[k] == null ? '' : String(form[k])
+    const b = client[k] == null ? '' : String(client[k])
+    return a !== b
+  }), [form, client])
 
   function set(key, val) {
     setForm(f => ({ ...f, [key]: val }))

@@ -1,5 +1,12 @@
+// Returns today's date as YYYY-MM-DD in LOCAL time (not UTC).
+// Previously used toISOString() which returns UTC — in IST (UTC+5:30)
+// this caused "today" to flip to tomorrow after 6:30 PM, hiding overdue items.
 export function todayStr() {
-  return new Date().toISOString().split('T')[0]
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 export function formatDue(due) {
@@ -46,11 +53,22 @@ export function formatCurrency(amount) {
   return '₹' + num.toLocaleString('en-IN')
 }
 
+// Build a WhatsApp link from a phone number.
+// Strips all non-digits, then prepends 91 only if the number doesn't already
+// start with the India country code — previously it blindly prepended 91 every
+// time, producing wa.me/9191... for numbers already entered with the country code.
 export function waLink(phone) {
   if (!phone) return null
   const digits = phone.replace(/\D/g, '')
   if (!digits) return null
-  return `https://wa.me/91${digits}`
+  // If already starts with 91 and is 12 digits (91 + 10-digit mobile), use as-is
+  // If it's a 10-digit number, prepend 91
+  // Otherwise pass through as-is (handles +1, +44, etc. entered without +)
+  let normalized = digits
+  if (digits.length === 10) {
+    normalized = '91' + digits
+  }
+  return `https://wa.me/${normalized}`
 }
 
 export function exportCSV(clients) {

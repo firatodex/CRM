@@ -9,6 +9,7 @@ import TodayView from './components/TodayView'
 import SearchBar from './components/SearchBar'
 import ActiveDeadPanel from './components/ActiveDeadPanel'
 import ExportModal from './components/ExportModal'
+import ConfirmModal from './components/ConfirmModal'
 import { formatCurrency, todayStr } from './utils'
 
 export default function App() {
@@ -24,6 +25,8 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [draggedClient, setDraggedClient] = useState(null)
   const [showExport, setShowExport] = useState(false)
+  // confirmDelete holds the client id to delete, or null
+  const [confirmDelete, setConfirmDelete] = useState(null)
 
   useEffect(() => {
     fetchClients()
@@ -42,6 +45,7 @@ export default function App() {
         setSearchOpen(false)
         setShowAdd(false)
         setShowExport(false)
+        setConfirmDelete(null)
       }
     }
     window.addEventListener('keydown', handleKey)
@@ -69,11 +73,24 @@ export default function App() {
     setLoading(false)
   }
 
+  // Paginated contact log fetch — fetches all logs in 500-row batches
+  // so the dashboard activity chart and history panel don't silently truncate.
   async function fetchContactLogs() {
-    const { data } = await supabase
-      .from('contact_log').select('*')
-      .order('contacted_at', { ascending: false }).limit(500)
-    if (data) setContactLogs(data)
+    let allLogs = []
+    let from = 0
+    const batchSize = 500
+    while (true) {
+      const { data, error } = await supabase
+        .from('contact_log').select('*')
+        .order('contacted_at', { ascending: false })
+        .range(from, from + batchSize - 1)
+      if (error) break
+      if (!data || data.length === 0) break
+      allLogs = [...allLogs, ...data]
+      if (data.length < batchSize) break
+      from += batchSize
+    }
+    setContactLogs(allLogs)
   }
 
   async function handleAdd(form) {
@@ -121,21 +138,41 @@ export default function App() {
     if (!error && data) setClients(prev => prev.map(c => c.id === data.id ? data : c))
   }
 
-  async function handleDelete(id) {
-    if (!confirm('Remove this client? This cannot be undone.')) return
-    setSaving(true)
-    const { error } = await supabase.from('clients').delete().eq('id', id)
-    if (error) setError(error.message)
-    else setClients(prev => prev.filter(c => c.id !== id))
-    setSaving(false)
-    setSelected(null)
+  // Instead of using native confirm(), we set the id and show ConfirmModal.
+  // The actual delete runs in handleDeleteConfirmed once the user clicks Delete.
+  function handleDelete(id) {
+    setConfirmDelete(id)
   }
 
-  async function handleLogContact(clientId, method, note) {
+  async function handleDeleteConfirmed() {
+    if (!confirmDelete) return
+    setSaving(true)
+    const { error } = await supabase.from('clients').delete().eq('id', confirmDelete)
+    if (error) setError(error.message)
+    else {
+      setClients(prev => prev.filter(c => c.id !== confirmDelete))
+      setSelected(null)
+    }
+    setSaving(false)
+    setConfirmDelete(null)
+  }
+
+  async function handleLogContact(clientId, method, whatHappened, whatNext) {
     const now = new Date().toISOString()
+    // Store what_happened and what_next as separate columns.
+    // The legacy `note` column is also populated (concatenated) so that any
+    // existing display code reading `note` still works during migration.
+    const legacyNote = whatHappened + (whatNext ? `\n→ Next: ${whatNext}` : '')
     const { data: logData } = await supabase
       .from('contact_log')
-      .insert({ client_id: clientId, method, note, contacted_at: now })
+      .insert({
+        client_id: clientId,
+        method,
+        note: legacyNote,
+        note_what_happened: whatHappened,
+        note_what_next: whatNext || null,
+        contacted_at: now,
+      })
       .select().single()
     if (logData) setContactLogs(prev => [logData, ...prev])
     const { data: clientData } = await supabase
@@ -161,7 +198,6 @@ export default function App() {
     !['active','dead'].includes(c.stage) && c.next_action_due && c.next_action_due <= today
   ).length
 
-  // Board views need to fill full height — non-board views scroll normally
   const isBoardView = view === 'pipeline' || view === 'today'
 
   return (
@@ -182,9 +218,15 @@ export default function App() {
           <button className={`nav-btn ${view === 'dashboard' ? 'active' : ''}`} onClick={() => setView('dashboard')}>
             Dashboard
           </button>
+          {/* Active clients — won deals — now have their own view */}
+          <button className={`nav-btn ${view === 'active' ? 'active' : ''}`} onClick={() => setView('active')}>
+            Clients
+            {activeClients.length > 0 && <span className="nav-badge green">{activeClients.length}</span>}
+          </button>
+          {/* Archive badge is gray — dead leads need no urgent action */}
           <button className={`nav-btn ${view === 'dead' ? 'active' : ''}`} onClick={() => setView('dead')}>
             Archive
-            {deadClients.length > 0 && <span className="nav-badge red">{deadClients.length}</span>}
+            {deadClients.length > 0 && <span className="nav-badge" style={{ background: 'var(--bg-light)', color: 'var(--text-light)' }}>{deadClients.length}</span>}
           </button>
         </nav>
         <div className="topbar-right">
@@ -246,10 +288,14 @@ export default function App() {
           <TodayView
             clients={clients}
             onCardClick={setSelected}
+            onDragStart={setDraggedClient}
+            draggedClient={draggedClient}
             onDrop={handleDrop}
           />
         ) : view === 'dashboard' ? (
           <Dashboard clients={clients} contactLogs={contactLogs} />
+        ) : view === 'active' ? (
+          <ActiveDeadPanel clients={activeClients} type="active" onCardClick={setSelected} />
         ) : (
           <ActiveDeadPanel clients={deadClients} type="dead" onCardClick={setSelected} />
         )}
@@ -277,6 +323,17 @@ export default function App() {
       )}
       {showExport && (
         <ExportModal clients={clients} contactLogs={contactLogs} onClose={() => setShowExport(false)} />
+      )}
+
+      {/* Proper delete confirmation modal — replaces native confirm() */}
+      {confirmDelete && (
+        <ConfirmModal
+          title="Delete this client?"
+          message="This will permanently remove the client and all their contact history. This cannot be undone."
+          confirmLabel="Delete"
+          onConfirm={handleDeleteConfirmed}
+          onCancel={() => setConfirmDelete(null)}
+        />
       )}
     </div>
   )

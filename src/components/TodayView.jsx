@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { PIPELINE_STAGES } from '../stages'
 import ClientCard from './ClientCard'
 import { todayStr } from '../utils'
@@ -29,6 +29,8 @@ function priorityScore(client) {
   return score
 }
 
+// TodayColumn receives draggedClient + onDragStart from parent so drag-and-drop
+// actually works. Previously these were hardcoded to null/noop, breaking drag.
 function TodayColumn({ stage, clients, onCardClick, draggedClient, onDragStart, onDrop }) {
   const [dragOver, setDragOver] = useState(false)
   const isDragTarget = !!draggedClient && draggedClient.stage !== stage.key
@@ -65,7 +67,7 @@ function TodayColumn({ stage, clients, onCardClick, draggedClient, onDragStart, 
   )
 }
 
-export default function TodayView({ clients, onCardClick, onDrop }) {
+export default function TodayView({ clients, onCardClick, onDragStart, draggedClient, onDrop }) {
   const today = todayStr()
 
   // Only pipeline leads that are overdue or due today
@@ -102,9 +104,9 @@ export default function TodayView({ clients, onCardClick, onDrop }) {
             stage={col}
             clients={col.clients}
             onCardClick={onCardClick}
-            onDragStart={() => {}}
+            onDragStart={onDragStart}
             onDrop={onDrop || (() => {})}
-            draggedClient={null}
+            draggedClient={draggedClient}
           />
         ))}
       </div>

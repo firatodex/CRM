@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { ALL_STAGES, TEMPERATURES, SOURCES } from '../stages'
 import { waLink, formatDateTime, todayStr } from '../utils'
 
@@ -7,7 +7,10 @@ const LOG_METHODS = ['Phone call', 'WhatsApp', 'Email', 'In person']
 function quickDate(daysFromNow) {
   const d = new Date()
   d.setDate(d.getDate() + daysFromNow)
-  return d.toISOString().split('T')[0]
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 export default function DetailModal({ client, contactLogs, onSave, onDelete, onLogContact, onClose, saving }) {
@@ -19,7 +22,9 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
   const [showLogForm, setShowLogForm] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
   const firstInputRef = useRef(null)
-  const isFirstEdit = useRef(true)
+
+  // Track whether the form has unsaved changes so we can warn before closing.
+  const isDirty = JSON.stringify(form) !== JSON.stringify(client)
 
   function set(key, val) {
     setForm(f => ({ ...f, [key]: val }))
@@ -28,42 +33,60 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
   const wa = waLink(client.phone)
   const emailLink = client.email ? `mailto:${client.email}` : null
 
-  // ⌘S / Ctrl+S shortcut
+  // Stable handleSave — wrapped in useCallback so the keyboard shortcut
+  // effect can list it as a dependency without re-registering on every keystroke.
+  const handleSave = useCallback(async () => {
+    // Removed the silent auto-advance from Lead → Contacted on first save.
+    // Stage changes must be explicit (user changes the Stage dropdown).
+    await onSave({ ...form })
+    setSavedFlash(true)
+    setTimeout(() => setSavedFlash(false), 1500)
+  }, [form, onSave])
+
+  // ⌘S / Ctrl+S shortcut — depends on handleSave (stable), not form directly.
   useEffect(() => {
     function handleKey(e) {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault()
         handleSave()
       }
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        // Warn before discarding unsaved changes
+        if (isDirty) {
+          if (window.confirm('You have unsaved changes. Close anyway?')) onClose()
+        } else {
+          onClose()
+        }
+      }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [form])
+  }, [handleSave, isDirty, onClose])
 
-  async function handleSave() {
-    let saveForm = { ...form }
-    // Auto-advance to Contacted on first save if still in Lead stage
-    if (client.stage === 'lead' && saveForm.stage === 'lead' && isFirstEdit.current) {
-      saveForm.stage = 'contacted'
-      isFirstEdit.current = false
+  // Guard backdrop click against unsaved changes too
+  function handleBackdropClick(e) {
+    if (e.target !== e.currentTarget) return
+    if (isDirty) {
+      if (window.confirm('You have unsaved changes. Close anyway?')) onClose()
+    } else {
+      onClose()
     }
-    await onSave(saveForm)
-    setSavedFlash(true)
-    setTimeout(() => setSavedFlash(false), 1500)
   }
 
   async function handleLog() {
     if (!logWhatHappened.trim()) return
-    const note = logWhatHappened.trim() + (logWhatNext.trim() ? `\n→ Next: ${logWhatNext.trim()}` : '')
-    await onLogContact(client.id, logMethod, note)
+    // Pass what_happened and what_next as separate arguments —
+    // App.jsx stores them in separate DB columns (note_what_happened, note_what_next)
+    // instead of concatenating them with a fragile string delimiter.
+    await onLogContact(client.id, logMethod, logWhatHappened.trim(), logWhatNext.trim() || null)
 
     // Update next action fields from log form
     const updates = {}
     if (logWhatNext.trim()) updates.next_action = logWhatNext.trim()
     if (logDue) updates.next_action_due = logDue
 
-    // Auto-advance stage if still Lead
+    // Auto-advance stage if still Lead — but this time it's triggered by
+    // actually logging a contact, which is a clear intentional signal.
     if (form.stage === 'lead') {
       updates.stage = 'contacted'
     }
@@ -82,8 +105,31 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
     setTimeout(() => setSavedFlash(false), 1500)
   }
 
+  // Render a contact log entry. Prefers the new split columns; falls back to
+  // parsing the legacy `note` string for rows created before the migration.
+  function renderLogEntry(log) {
+    let whatHappened, whatNext
+    if (log.note_what_happened != null) {
+      whatHappened = log.note_what_happened
+      whatNext = log.note_what_next
+    } else if (log.note) {
+      // Legacy: split on the "\n→ Next: " delimiter
+      const parts = log.note.split('\n→ Next: ')
+      whatHappened = parts[0]
+      whatNext = parts[1] || null
+    }
+    return (
+      <div key={log.id} className="history-item">
+        <div className="history-method">{log.method}</div>
+        {whatHappened && <div className="history-note">{whatHappened}</div>}
+        {whatNext && <div className="history-next-action">→ {whatNext}</div>}
+        <div className="history-time">{formatDateTime(log.contacted_at)}</div>
+      </div>
+    )
+  }
+
   return (
-    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="overlay" onClick={handleBackdropClick}>
       <div className="modal modal-lg">
         {/* Header */}
         <div className="detail-header">
@@ -110,6 +156,13 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
             )}
           </div>
         </div>
+
+        {/* Unsaved changes indicator */}
+        {isDirty && (
+          <div style={{ fontSize: 11, color: 'var(--warning)', padding: '4px 0 0', textAlign: 'right', paddingRight: 2 }}>
+            Unsaved changes
+          </div>
+        )}
 
         {/* Two-column layout */}
         <div className="detail-grid detail-grid-wide">
@@ -191,7 +244,7 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
             </div>
           </div>
 
-          {/* Right column: contact history — wider */}
+          {/* Right column: contact history */}
           <div className="detail-history detail-history-wide">
             <div className="history-header">
               <span className="section-label" style={{ margin: 0, padding: 0, border: 'none' }}>Contact History</span>
@@ -200,7 +253,6 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
               </button>
             </div>
 
-            {/* Next action summary (moved from left panel) */}
             {(form.next_action || form.next_action_due) && !showLogForm && (
               <div className="next-action-summary">
                 <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 3, fontWeight: 500 }}>NEXT ACTION</div>
@@ -276,19 +328,7 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
               {contactLogs.length === 0 ? (
                 <div className="empty-history">No contact history yet</div>
               ) : (
-                contactLogs.map(log => {
-                  const parts = log.note.split('\n→ Next: ')
-                  return (
-                    <div key={log.id} className="history-item">
-                      <div className="history-method">{log.method}</div>
-                      <div className="history-note">{parts[0]}</div>
-                      {parts[1] && (
-                        <div className="history-next-action">→ {parts[1]}</div>
-                      )}
-                      <div className="history-time">{formatDateTime(log.contacted_at)}</div>
-                    </div>
-                  )
-                })
+                contactLogs.map(log => renderLogEntry(log))
               )}
             </div>
           </div>
@@ -303,7 +343,13 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
           <span style={{ fontSize: 12, color: 'var(--text2)', opacity: savedFlash ? 1 : 0, transition: 'opacity 0.3s' }}>
             ✓ Saved
           </span>
-          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-secondary" onClick={() => {
+            if (isDirty) {
+              if (window.confirm('You have unsaved changes. Close anyway?')) onClose()
+            } else {
+              onClose()
+            }
+          }}>Cancel</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
             {saving ? 'Saving...' : 'Save'} <span style={{ opacity: 0.6, fontSize: 11 }}>⌘S</span>
           </button>

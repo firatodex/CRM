@@ -33,19 +33,32 @@ export default function Dashboard({ clients, contactLogs }) {
   const pipelineRevenue = pipeline.reduce((s, c) => s + (Number(c.potential_revenue) || 0), 0)
   const activeRevenue   = active.reduce((s, c) => s + (Number(c.potential_revenue) || 0), 0)
 
-  // Conversion + win/loss
+  // Win rate: won / (won + lost). Only meaningful once there are closed deals.
   const closedTotal = active.length + dead.length
   const winRate = closedTotal > 0 ? ((active.length / closedTotal) * 100).toFixed(0) : '—'
 
-  // Velocity: avg days from lead creation to active (only for active clients with created_at)
+  // Velocity: avg days from lead creation to FIRST contact log entry (for active clients).
+  // This is a proxy for time-to-first-response, not total deal cycle — which would
+  // require a dedicated `converted_at` timestamp column to compute accurately.
+  // The old calculation measured record age (new Date() - created_at), which is wrong.
   const velocities = active
     .filter(c => c.created_at)
-    .map(c => Math.round((new Date() - new Date(c.created_at)) / 86400000))
+    .map(c => {
+      // Find the earliest contact log for this client
+      const clientLogs = contactLogs.filter(l => l.client_id === c.id)
+      if (clientLogs.length === 0) return null
+      const earliest = clientLogs.reduce((min, l) =>
+        new Date(l.contacted_at) < new Date(min.contacted_at) ? l : min
+      )
+      return Math.round((new Date(earliest.contacted_at) - new Date(c.created_at)) / 86400000)
+    })
+    .filter(v => v !== null && v >= 0)
+
   const avgVelocity = velocities.length
     ? Math.round(velocities.reduce((a, b) => a + b, 0) / velocities.length)
     : null
 
-  // Average deal size
+  // Average deal size (active clients only)
   const dealsWithRevenue = active.filter(c => c.potential_revenue)
   const avgDeal = dealsWithRevenue.length
     ? dealsWithRevenue.reduce((s, c) => s + Number(c.potential_revenue), 0) / dealsWithRevenue.length
@@ -68,15 +81,13 @@ export default function Dashboard({ clients, contactLogs }) {
   })
   const weekTrend = thisWeekLogs.length - lastWeekLogs.length
 
-  // Contact activity — last 30 days
-  // Use local date strings to avoid UTC vs IST timezone mismatch
+  // Contact activity — last 30 days (local date, not UTC)
   function toLocalDateStr(date) {
     const y = date.getFullYear()
     const m = String(date.getMonth() + 1).padStart(2, '0')
     const dd = String(date.getDate()).padStart(2, '0')
     return `${y}-${m}-${dd}`
   }
-  // Pre-convert all log timestamps to local date strings once
   const logLocalDates = contactLogs.map(l =>
     l.contacted_at ? toLocalDateStr(new Date(l.contacted_at)) : null
   )
@@ -104,7 +115,32 @@ export default function Dashboard({ clients, contactLogs }) {
     color: STAGE_COLORS[s.key],
   }))
 
-  // Hot leads with revenue — top 5 opportunities
+  // Funnel conversion rates.
+  // FIXED: The old formula was `to / (from + to)` which is a ratio of current
+  // bucket sizes, not a conversion rate. That number changes whenever you add
+  // a new lead, even if nothing converted.
+  // Correct definition: of all clients who ever passed through stage X,
+  // what fraction reached stage Y?  Because we don't store stage history,
+  // we approximate with: clients at or past stage Y / clients at or past stage X.
+  // "At or past" = in [Y, ...later stages] by pipeline order.
+  const stageOrder = ['lead', 'contacted', 'proposal', 'active']
+  function atOrPastStage(stageKey) {
+    const idx = stageOrder.indexOf(stageKey)
+    if (idx === -1) return 0
+    const laterKeys = stageOrder.slice(idx)
+    return clients.filter(c => laterKeys.includes(c.stage) || c.stage === 'active').length
+  }
+  const funnelRates = [
+    { label: 'Lead → Contacted', from: 'lead', to: 'contacted' },
+    { label: 'Contacted → Proposal', from: 'contacted', to: 'proposal' },
+  ].map(({ label, from, to }) => {
+    const fromCount = atOrPastStage(from)
+    const toCount   = atOrPastStage(to)
+    const rate = fromCount > 0 ? Math.round((toCount / fromCount) * 100) : 0
+    return { label, rate }
+  })
+
+  // Top 5 pipeline opportunities by revenue
   const topOpportunities = pipeline
     .filter(c => c.potential_revenue)
     .sort((a, b) => Number(b.potential_revenue) - Number(a.potential_revenue))
@@ -189,25 +225,17 @@ export default function Dashboard({ clients, contactLogs }) {
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-          {/* Conversion funnel numbers below */}
+          {/* Funnel conversion rates */}
           <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-            {[
-              { label: 'Lead→Contacted', from: 'lead', to: 'contacted' },
-              { label: 'Contacted→Proposal', from: 'contacted', to: 'proposal' },
-            ].map(({ label, from, to }) => {
-              const fromCount = clients.filter(c => c.stage === from).length
-              const toCount   = clients.filter(c => c.stage === to).length
-              const rate = fromCount > 0 ? Math.round((toCount / (fromCount + toCount)) * 100) : 0
-              return (
-                <div key={label} style={{
-                  flex: 1, background: 'var(--bg-light)', borderRadius: 6,
-                  padding: '6px 10px', fontSize: 11, color: 'var(--text-light)'
-                }}>
-                  <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-dark)' }}>{rate}%</div>
-                  {label}
-                </div>
-              )
-            })}
+            {funnelRates.map(({ label, rate }) => (
+              <div key={label} style={{
+                flex: 1, background: 'var(--bg-light)', borderRadius: 6,
+                padding: '6px 10px', fontSize: 11, color: 'var(--text-light)'
+              }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-dark)' }}>{rate}%</div>
+                {label}
+              </div>
+            ))}
           </div>
         </div>
 
@@ -223,7 +251,7 @@ export default function Dashboard({ clients, contactLogs }) {
                 <div className="alert-text">Overdue follow-ups</div>
                 {overdue.length > 0 && (
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    Oldest: {overdue.sort((a,b) => a.next_action_due.localeCompare(b.next_action_due))[0]?.next_action_due}
+                    Oldest: {[...overdue].sort((a,b) => a.next_action_due.localeCompare(b.next_action_due))[0]?.next_action_due}
                   </div>
                 )}
               </div>
@@ -254,8 +282,8 @@ export default function Dashboard({ clients, contactLogs }) {
               <div className="alert-item" style={{ background: 'var(--blue-bg)' }}>
                 <span className="alert-count" style={{ color: 'var(--primary)' }}>{avgVelocity}d</span>
                 <div>
-                  <div className="alert-text">Avg. days to close</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Based on {active.length} won deals</div>
+                  <div className="alert-text">Avg. days to first contact</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Lead created → first log entry</div>
                 </div>
               </div>
             )}

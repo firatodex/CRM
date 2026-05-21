@@ -159,21 +159,36 @@ export default function App() {
 
   async function handleLogContact(clientId, method, whatHappened, whatNext) {
     const now = new Date().toISOString()
-    // Store what_happened and what_next as separate columns.
-    // The legacy `note` column is also populated (concatenated) so that any
-    // existing display code reading `note` still works during migration.
-    const legacyNote = whatHappened + (whatNext ? `\n→ Next: ${whatNext}` : '')
-    const { data: logData } = await supabase
+    // Always write to the legacy `note` column so the insert never fails even
+    // if the new split columns haven't been added to the DB yet via the migration.
+    const note = whatHappened + (whatNext ? `\n→ Next: ${whatNext}` : '')
+
+    // Attempt insert with new split columns. If those columns don't exist yet
+    // in Supabase, the insert returns an error — we fall back to legacy schema.
+    let logData = null
+    const { data: d1, error: e1 } = await supabase
       .from('contact_log')
       .insert({
         client_id: clientId,
         method,
-        note: legacyNote,
+        note,
         note_what_happened: whatHappened,
         note_what_next: whatNext || null,
         contacted_at: now,
       })
       .select().single()
+
+    if (e1) {
+      // New columns don't exist yet — insert with legacy schema only
+      const { data: d2 } = await supabase
+        .from('contact_log')
+        .insert({ client_id: clientId, method, note, contacted_at: now })
+        .select().single()
+      logData = d2
+    } else {
+      logData = d1
+    }
+
     if (logData) setContactLogs(prev => [logData, ...prev])
     const { data: clientData } = await supabase
       .from('clients').update({ last_contacted_at: now }).eq('id', clientId).select().single()

@@ -128,7 +128,7 @@ module.exports = async function handler(req, res) {
 
   var context = buildContext(client, logs)
   var userPrompt = ''
-  var genConfig = { temperature: 0.4, maxOutputTokens: 1000 }
+  var genConfig = { temperature: 0.4, maxOutputTokens: 2000 }
 
   if (feature === 'intelligence') {
     userPrompt = context + '\n\nYOUR TASK:\nMake a revenue decision on this lead. Do not summarize what I already know. Give me new insight and a clear verdict.\nRespond in this EXACT format — do not add or remove sections:\n\nDECISION: [PUSH / PARK / DROP]\nREASON: [One brutal sentence. Why this verdict specifically. Reference actual numbers and log evidence.]\n\nSITUATION\n[What is actually happening — not a restatement of fields. What is the real dynamic? Where is this deal stuck or moving?]\n\nPSYCHOLOGICAL READ\n[What is this person actually thinking? Genuinely interested, politely stalling, not the decision maker, price-shopping? What pattern across logs tells you this?]\n\nRED FLAGS\n[Specific warning signs from the logs. Reference actual log entries. Write None if genuinely clean.]\n\nBUYING SIGNALS\n[Specific positive signals from logs. Reference actual entries. Write None if absent.]\n\nNEXT ACTION\n[One action that matches the DECISION. DROP: final message or archive. PARK: one low-effort touchpoint with future date. PUSH: specific urgent move.]\n\nWHATSAPP DRAFT\n[Message that matches DECISION tone. PUSH = urgent and specific. PARK = low pressure, future hook. DROP = clean professional close. Natural Indian B2B language.]'

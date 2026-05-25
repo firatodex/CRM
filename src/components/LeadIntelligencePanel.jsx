@@ -24,14 +24,14 @@ function UrgencyBadge({ level }) {
 function parseIntelligence(text) {
   const sections = {}
   const keys = [
-    'SITUATION SUMMARY',
-    'PSYCHOLOGICAL READING',
+    'DECISION',
+    'REASON',
+    'SITUATION',
+    'PSYCHOLOGICAL READ',
     'RED FLAGS',
     'BUYING SIGNALS',
-    'RECOMMENDED NEXT ACTION',
-    'SUGGESTED MESSAGE',
-    'URGENCY LEVEL',
-    'REASONING',
+    'NEXT ACTION',
+    'WHATSAPP DRAFT',
   ]
   keys.forEach((key, i) => {
     const nextKey = keys[i + 1]
@@ -273,7 +273,7 @@ export default function LeadIntelligencePanel({ client, contactLogs }) {
 
   function copyMessage() {
     if (!intel?.['SUGGESTED MESSAGE']) return
-    navigator.clipboard.writeText(intel['SUGGESTED MESSAGE'])
+    navigator.clipboard.writeText(intel['WHATSAPP DRAFT'])
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -364,47 +364,61 @@ export default function LeadIntelligencePanel({ client, contactLogs }) {
   }
 
   // Results
-  const urgency = intel['URGENCY LEVEL']?.split('\n')[0]?.trim()
-  const reasoning = intel['REASONING']?.trim()
+  const decision = intel['DECISION']?.trim().toUpperCase()
+  const reason = intel['REASON']?.trim()
+
+  const decisionStyle = {
+    PUSH:  { bg: '#E8F9EE', color: '#1A7A3F', border: '#B8EDD0', emoji: '🚀' },
+    PARK:  { bg: '#FFF4E5', color: '#854F0B', border: '#FFD699', emoji: '⏸️' },
+    DROP:  { bg: '#FFF0EF', color: '#A32D2D', border: '#FFBAB5', emoji: '🗑️' },
+  }
+  const ds = decisionStyle[decision] || { bg: 'var(--bg-light)', color: 'var(--text-dark)', border: 'var(--border)', emoji: '⚡' }
 
   return (
     <div style={{ marginBottom: 12 }}>
-      {/* Header row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            ✦ AI Intelligence
-          </span>
-          {urgency && <UrgencyBadge level={urgency} />}
+      {/* DECISION — the most important output, shown first and largest */}
+      <div style={{
+        background: ds.bg, border: '1.5px solid ' + ds.border,
+        borderRadius: 10, padding: '12px 14px', marginBottom: 10,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 22 }}>{ds.emoji}</span>
+            <span style={{ fontSize: 20, fontWeight: 800, color: ds.color, letterSpacing: -0.5 }}>
+              {decision || '...'}
+            </span>
+          </div>
+          <button
+            onClick={handleAnalyse}
+            style={{
+              fontSize: 11, padding: '3px 10px', borderRadius: 20,
+              background: 'transparent', border: '1px solid ' + ds.border,
+              color: ds.color, cursor: 'pointer',
+            }}
+          >
+            ↻ Refresh
+          </button>
         </div>
-        <button
-          onClick={handleAnalyse}
-          style={{
-            fontSize: 11, padding: '3px 10px', borderRadius: 20,
-            background: 'transparent', border: '1px solid var(--border)',
-            color: 'var(--text-light)', cursor: 'pointer',
-          }}
-        >
-          ↻ Refresh
-        </button>
+        {reason && (
+          <div style={{ fontSize: 12, color: ds.color, marginTop: 6, lineHeight: 1.5, fontWeight: 500 }}>
+            {reason}
+          </div>
+        )}
+        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
+          Based on {contactLogs.length} logged interaction{contactLogs.length !== 1 ? 's' : ''}
+        </div>
       </div>
-
-      {reasoning && (
-        <div style={{ fontSize: 12, color: 'var(--text-light)', marginBottom: 10, fontStyle: 'italic' }}>
-          {reasoning}
-        </div>
-      )}
 
       <Section
         icon="📍"
         title="Situation"
-        content={intel['SITUATION SUMMARY']}
+        content={intel['SITUATION']}
       />
 
       <Section
         icon="🧠"
-        title="Psychological reading"
-        content={intel['PSYCHOLOGICAL READING']}
+        title="Psychological read"
+        content={intel['PSYCHOLOGICAL READ']}
         accent="var(--bg-lighter)"
       />
 
@@ -424,13 +438,13 @@ export default function LeadIntelligencePanel({ client, contactLogs }) {
 
       <Section
         icon="⚡"
-        title="Recommended next action"
-        content={intel['RECOMMENDED NEXT ACTION']}
+        title="Next action"
+        content={intel['NEXT ACTION']}
         accent="#E8F2FF"
       />
 
       {/* Suggested WhatsApp message — with copy button */}
-      {intel['SUGGESTED MESSAGE'] && (
+      {intel['WHATSAPP DRAFT'] && (
         <div style={{
           marginBottom: 12, padding: '10px 12px',
           borderRadius: 8, background: '#E8F9EE',
@@ -454,7 +468,7 @@ export default function LeadIntelligencePanel({ client, contactLogs }) {
             </button>
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-body)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-            {intel['SUGGESTED MESSAGE']}
+            {intel['WHATSAPP DRAFT']}
           </div>
         </div>
       )}

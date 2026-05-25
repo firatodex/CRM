@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ClientCard from './ClientCard'
 
-export default function KanbanColumn({ stage, clients, onCardClick, onDragStart, onDrop, isDragTarget, logCountMap = {} }) {
+export default function KanbanColumn({ stage, clients, onCardClick, onDragStart, onDrop, isDragTarget }) {
   const [dragOver, setDragOver] = useState(false)
 
   function handleDragOver(e) {
@@ -9,7 +9,9 @@ export default function KanbanColumn({ stage, clients, onCardClick, onDragStart,
     if (isDragTarget) setDragOver(true)
   }
 
-  function handleDragLeave() { setDragOver(false) }
+  function handleDragLeave() {
+    setDragOver(false)
+  }
 
   function handleDrop(e) {
     e.preventDefault()
@@ -41,7 +43,6 @@ export default function KanbanColumn({ stage, clients, onCardClick, onDragStart,
                 client={c}
                 onClick={onCardClick}
                 onDragStart={onDragStart}
-                logCount={logCountMap[c.id] || 0}
               />
             ))
         }

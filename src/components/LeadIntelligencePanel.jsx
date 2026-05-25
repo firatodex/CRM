@@ -250,16 +250,24 @@ export default function LeadIntelligencePanel({ client, contactLogs }) {
   const [intel, setIntel] = useState(null)
   const [error, setError] = useState(null)
   const [copied, setCopied] = useState(false)
+  const [retryMsg, setRetryMsg] = useState(null)
 
   async function handleAnalyse() {
     setLoading(true)
     setError(null)
+    setRetryMsg(null)
+    // Show a "retrying..." message while callGemini does its backoff
+    const retryTimer = setTimeout(() => {
+      setRetryMsg('Rate limit hit — retrying automatically...')
+    }, 3000)
     try {
       const result = await getLeadIntelligence(client, contactLogs)
       setIntel(parseIntelligence(result))
     } catch (e) {
       setError(e.message)
     }
+    clearTimeout(retryTimer)
+    setRetryMsg(null)
     setLoading(false)
   }
 
@@ -314,20 +322,20 @@ export default function LeadIntelligencePanel({ client, contactLogs }) {
         background: 'var(--bg-lighter)',
       }}>
         <div style={{ fontSize: 13, color: 'var(--primary)', fontWeight: 600, marginBottom: 6 }}>
-          ✦ Reading {contactLogs.length} interactions...
+          {retryMsg || `✦ Reading ${contactLogs.length} interactions...`}
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          Analysing patterns, objections, buying signals
+          {retryMsg ? 'Google rate limit — will retry automatically, no action needed' : 'Analysing patterns, objections, buying signals'}
         </div>
         <div style={{
           marginTop: 12, height: 3, background: 'var(--border-light)',
           borderRadius: 3, overflow: 'hidden',
         }}>
           <div style={{
-            height: '100%', width: '60%',
-            background: 'linear-gradient(90deg, #0071E3, #5856D6)',
+            height: '100%', width: retryMsg ? '90%' : '60%',
+            background: retryMsg ? 'linear-gradient(90deg, #FF9500, #FF3B30)' : 'linear-gradient(90deg, #0071E3, #5856D6)',
             borderRadius: 3,
-            animation: 'shimmer 1.5s ease-in-out infinite',
+            transition: 'width 0.5s ease',
           }} />
         </div>
       </div>

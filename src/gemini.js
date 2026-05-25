@@ -1,5 +1,5 @@
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${API_KEY}`
 
 // ─── System prompt — your business DNA ───────────────────────────
 // This travels with EVERY Gemini call. Edit this to match your business.
@@ -75,10 +75,10 @@ ${next ? `What was planned next: ${next}` : ''}`
   return `${profile}\n${history}`
 }
 
-// ─── Core API call ────────────────────────────────────────────────
-async function callGemini(prompt) {
-  if (!API_KEY) throw new Error('Gemini API key not set. Add VITE_GEMINI_API_KEY to .env.local')
-  
+// ─── Core API call with automatic retry on rate limit ────────────
+async function callGemini(prompt, retryCount = 0) {
+  if (!API_KEY) throw new Error('Gemini API key not configured. Add VITE_GEMINI_API_KEY in Vercel environment variables.')
+
   const response = await fetch(API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -91,9 +91,30 @@ async function callGemini(prompt) {
     })
   })
 
+  // Rate limit hit (429) — wait and retry automatically up to 3 times
+  if (response.status === 429) {
+    if (retryCount >= 3) {
+      throw new Error('Rate limit reached. You've made too many AI requests in the last minute. Wait 30 seconds and try again.')
+    }
+    // Extract retry delay from Google's response if available, else use backoff
+    const err = await response.json().catch(() => ({}))
+    const retryAfterMs = (() => {
+      const msg = err?.error?.message || ''
+      const match = msg.match(/retry in ([\d.]+)s/)
+      return match ? Math.ceil(parseFloat(match[1])) * 1000 : (retryCount + 1) * 10000
+    })()
+    await new Promise(r => setTimeout(r, retryAfterMs))
+    return callGemini(prompt, retryCount + 1)
+  }
+
   if (!response.ok) {
-    const err = await response.json()
-    throw new Error(err.error?.message || 'Gemini API error')
+    const err = await response.json().catch(() => ({}))
+    const msg = err?.error?.message || `API error ${response.status}`
+    // Make common errors readable
+    if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) {
+      throw new Error('Invalid API key. Check VITE_GEMINI_API_KEY in your Vercel environment variables.')
+    }
+    throw new Error(msg)
   }
 
   const data = await response.json()

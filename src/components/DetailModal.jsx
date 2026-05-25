@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { ALL_STAGES, TEMPERATURES, SOURCES } from '../stages'
 import { waLink, formatDateTime, todayStr } from '../utils'
+import LeadIntelligencePanel, { SmartNoteDumper } from './LeadIntelligencePanel'
 
 const LOG_METHODS = ['Phone call', 'WhatsApp', 'Email', 'In person']
 
@@ -13,18 +14,22 @@ function quickDate(daysFromNow) {
   return `${y}-${m}-${day}`
 }
 
+// Which tab is active in the right panel
+const RIGHT_TABS = ['Log', 'History', 'AI Intel']
+
 export default function DetailModal({ client, contactLogs, onSave, onDelete, onLogContact, onClose, saving }) {
   const [form, setForm] = useState({ ...client })
   const [logMethod, setLogMethod] = useState('Phone call')
   const [logWhatHappened, setLogWhatHappened] = useState('')
-  const [logWhatNext, setLogWhatNext] = useState('')
-  const [logDue, setLogDue] = useState('')
-  const [showLogForm, setShowLogForm] = useState(false)
-  const [savedFlash, setSavedFlash] = useState(false)
+  const [logWhatNext, setLogWhatNext]         = useState('')
+  const [logDue, setLogDue]                   = useState('')
+  const [showSmartDump, setShowSmartDump]     = useState(false)
+  const [rightTab, setRightTab]               = useState('Log')
+  const [savedFlash, setSavedFlash]           = useState(false)
   const firstInputRef = useRef(null)
   const flashTimerRef = useRef(null)
 
-  // Clear flash timer on unmount to avoid setState-on-unmounted-component
+  // Clean up flash timer on unmount
   useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current) }, [])
 
   function showFlash() {
@@ -33,10 +38,8 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
     flashTimerRef.current = setTimeout(() => setSavedFlash(false), 1500)
   }
 
-  // Track whether the form has unsaved changes so we can warn before closing.
-  // Compare only the editable fields so type coercion (e.g. DB returns
-  // potential_revenue as a number while the input keeps it as a string)
-  // doesn't cause false positives where the form appears dirty immediately.
+  // Dirty check: compare only editable fields as strings so numeric/string
+  // type mismatches from the DB don't cause false positives on open.
   const EDITABLE_FIELDS = [
     'name','stage','phone','email','company','business_type',
     'next_action','next_action_due','notes','temperature',
@@ -48,97 +51,80 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
     return a !== b
   }), [form, client])
 
-  function set(key, val) {
-    setForm(f => ({ ...f, [key]: val }))
-  }
+  function set(key, val) { setForm(f => ({ ...f, [key]: val })) }
 
-  const wa = waLink(client.phone)
+  const wa        = waLink(client.phone)
   const emailLink = client.email ? `mailto:${client.email}` : null
 
-  // Stable handleSave — wrapped in useCallback so the keyboard shortcut
-  // effect can list it as a dependency without re-registering on every keystroke.
   const handleSave = useCallback(async () => {
-    // Removed the silent auto-advance from Lead → Contacted on first save.
-    // Stage changes must be explicit (user changes the Stage dropdown).
     await onSave({ ...form })
-    setSavedFlash(true)
-    setTimeout(() => setSavedFlash(false), 1500)
+    showFlash()
   }, [form, onSave])
 
-  // ⌘S / Ctrl+S shortcut — depends on handleSave (stable), not form directly.
+  // Keyboard shortcuts
   useEffect(() => {
     function handleKey(e) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-        e.preventDefault()
-        handleSave()
-      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); handleSave() }
       if (e.key === 'Escape') {
-        // Warn before discarding unsaved changes
-        if (isDirty) {
-          if (window.confirm('You have unsaved changes. Close anyway?')) onClose()
-        } else {
-          onClose()
-        }
+        if (isDirty) { if (window.confirm('You have unsaved changes. Close anyway?')) onClose() }
+        else onClose()
       }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
   }, [handleSave, isDirty, onClose])
 
-  // Guard backdrop click against unsaved changes too
   function handleBackdropClick(e) {
     if (e.target !== e.currentTarget) return
-    if (isDirty) {
-      if (window.confirm('You have unsaved changes. Close anyway?')) onClose()
-    } else {
-      onClose()
-    }
+    if (isDirty) { if (window.confirm('You have unsaved changes. Close anyway?')) onClose() }
+    else onClose()
   }
 
   async function handleLog() {
     if (!logWhatHappened.trim()) return
-    // Pass what_happened and what_next as separate arguments —
-    // App.jsx stores them in separate DB columns (note_what_happened, note_what_next)
-    // instead of concatenating them with a fragile string delimiter.
     await onLogContact(client.id, logMethod, logWhatHappened.trim(), logWhatNext.trim() || null)
-
-    // Update next action fields from log form
     const updates = {}
-    if (logWhatNext.trim()) updates.next_action = logWhatNext.trim()
-    if (logDue) updates.next_action_due = logDue
-
-    // Auto-advance stage if still Lead — but this time it's triggered by
-    // actually logging a contact, which is a clear intentional signal.
-    if (form.stage === 'lead') {
-      updates.stage = 'contacted'
-    }
-
+    if (logWhatNext.trim()) updates.next_action     = logWhatNext.trim()
+    if (logDue)             updates.next_action_due = logDue
+    if (form.stage === 'lead') updates.stage = 'contacted'
     if (Object.keys(updates).length > 0) {
       const newForm = { ...form, ...updates }
       setForm(newForm)
       await onSave({ ...client, ...newForm })
     }
-
     setLogWhatHappened('')
     setLogWhatNext('')
     setLogDue('')
-    setShowLogForm(false)
-    setSavedFlash(true)
-    setTimeout(() => setSavedFlash(false), 1500)
+    showFlash()
+    // Switch to History tab after logging so user sees the new entry
+    setRightTab('History')
   }
 
-  // Render a contact log entry. Prefers the new split columns; falls back to
-  // parsing the legacy `note` string for rows created before the migration.
+  // Called by SmartNoteDumper when user clicks "Apply to log form"
+  // Fills the log form fields from AI-parsed note and optionally
+  // updates the main form fields (stage, temperature, pain point).
+  function handleAIApply({ whatHappened, whatNext, dueDate, stage, temperature, painPoint }) {
+    setLogWhatHappened(whatHappened || '')
+    setLogWhatNext(whatNext || '')
+    setLogDue(dueDate || '')
+    setShowSmartDump(false)
+    // Apply suggested field changes to the form (user still must Save)
+    if (stage)       set('stage', stage)
+    if (temperature) set('temperature', temperature)
+    if (painPoint)   set('pain_point', painPoint)
+    // Switch to Log tab so they can review and save
+    setRightTab('Log')
+  }
+
   function renderLogEntry(log) {
     let whatHappened, whatNext
     if (log.note_what_happened != null) {
       whatHappened = log.note_what_happened
-      whatNext = log.note_what_next
+      whatNext     = log.note_what_next
     } else if (log.note) {
-      // Legacy: split on the "\n→ Next: " delimiter
-      const parts = log.note.split('\n→ Next: ')
+      const parts  = log.note.split('\n→ Next: ')
       whatHappened = parts[0]
-      whatNext = parts[1] || null
+      whatNext     = parts[1] || null
     }
     return (
       <div key={log.id} className="history-item">
@@ -153,7 +139,8 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
   return (
     <div className="overlay" onClick={handleBackdropClick}>
       <div className="modal modal-lg">
-        {/* Header */}
+
+        {/* ── Header ── */}
         <div className="detail-header">
           <div>
             <div className="modal-title" style={{ margin: 0 }}>{client.name}</div>
@@ -171,7 +158,8 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
             {emailLink && (
               <a href={emailLink} className="btn btn-email btn-sm" onClick={e => e.stopPropagation()}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                  <rect x="2" y="4" width="20" height="16" rx="2"/>
+                  <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
                 </svg>
                 Email
               </a>
@@ -179,16 +167,16 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
           </div>
         </div>
 
-        {/* Unsaved changes indicator */}
         {isDirty && (
-          <div style={{ fontSize: 11, color: 'var(--warning)', padding: '4px 0 0', textAlign: 'right', paddingRight: 2 }}>
+          <div style={{ fontSize: 11, color: 'var(--warning)', textAlign: 'right', marginBottom: 4 }}>
             Unsaved changes
           </div>
         )}
 
-        {/* Two-column layout */}
+        {/* ── Two-column grid ── */}
         <div className="detail-grid detail-grid-wide">
-          {/* Left column: fields */}
+
+          {/* ── Left: fields ── */}
           <div className="detail-fields">
             <div className="field-row">
               <div className="field">
@@ -266,97 +254,198 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
             </div>
           </div>
 
-          {/* Right column: contact history */}
+          {/* ── Right: tabbed panel ── */}
           <div className="detail-history detail-history-wide">
-            <div className="history-header">
-              <span className="section-label" style={{ margin: 0, padding: 0, border: 'none' }}>Contact History</span>
-              <button className="btn btn-sm btn-primary" onClick={() => setShowLogForm(!showLogForm)}>
-                {showLogForm ? '✕ Cancel' : '+ Log'}
-              </button>
+
+            {/* Tab bar */}
+            <div style={{ display: 'flex', gap: 2, marginBottom: 12, background: 'var(--bg-light)', borderRadius: 8, padding: 3 }}>
+              {RIGHT_TABS.map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setRightTab(tab)}
+                  style={{
+                    flex: 1, padding: '5px 0', fontSize: 12, fontWeight: 600,
+                    border: 'none', borderRadius: 6, cursor: 'pointer',
+                    background: rightTab === tab ? 'var(--bg-white)' : 'transparent',
+                    color: rightTab === tab ? 'var(--primary)' : 'var(--text-light)',
+                    boxShadow: rightTab === tab ? 'var(--shadow-sm)' : 'none',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {tab === 'AI Intel' ? '✦ AI Intel' : tab}
+                  {tab === 'History' && contactLogs.length > 0 && (
+                    <span style={{
+                      marginLeft: 4, fontSize: 10, background: 'var(--border-light)',
+                      color: 'var(--text-muted)', borderRadius: 10, padding: '0 5px',
+                    }}>
+                      {contactLogs.length}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
 
-            {(form.next_action || form.next_action_due) && !showLogForm && (
-              <div className="next-action-summary">
-                <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 3, fontWeight: 500 }}>NEXT ACTION</div>
-                {form.next_action && <div style={{ fontSize: 13, color: 'var(--text1)' }}>{form.next_action}</div>}
-                {form.next_action_due && (
-                  <div style={{ fontSize: 12, color: form.next_action_due < todayStr() ? 'var(--danger)' : 'var(--text2)', marginTop: 2 }}>
-                    Due: {new Date(form.next_action_due + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            {/* ── Tab: Log ── */}
+            {rightTab === 'Log' && (
+              <div>
+                {(form.next_action || form.next_action_due) && (
+                  <div className="next-action-summary" style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 3, fontWeight: 500 }}>NEXT ACTION</div>
+                    {form.next_action && <div style={{ fontSize: 13, color: 'var(--text1)' }}>{form.next_action}</div>}
+                    {form.next_action_due && (
+                      <div style={{ fontSize: 12, color: form.next_action_due < todayStr() ? 'var(--danger)' : 'var(--text2)', marginTop: 2 }}>
+                        Due: {new Date(form.next_action_due + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Toggle: smart dump vs manual entry */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                  <button
+                    onClick={() => setShowSmartDump(false)}
+                    style={{
+                      flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600,
+                      border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer',
+                      background: !showSmartDump ? 'var(--primary)' : 'transparent',
+                      color: !showSmartDump ? '#fff' : 'var(--text-light)',
+                    }}
+                  >
+                    Manual log
+                  </button>
+                  <button
+                    onClick={() => setShowSmartDump(true)}
+                    style={{
+                      flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600,
+                      border: '1px solid var(--primary)', borderRadius: 6, cursor: 'pointer',
+                      background: showSmartDump ? 'var(--primary)' : 'transparent',
+                      color: showSmartDump ? '#fff' : 'var(--primary)',
+                    }}
+                  >
+                    ✦ AI parse
+                  </button>
+                </div>
+
+                {/* AI Smart Dumper */}
+                {showSmartDump && (
+                  <SmartNoteDumper
+                    client={client}
+                    contactLogs={contactLogs}
+                    onApply={handleAIApply}
+                  />
+                )}
+
+                {/* Manual log form */}
+                {!showSmartDump && (
+                  <div className="log-form log-form-rich">
+                    <div className="log-method-row">
+                      {LOG_METHODS.map(m => (
+                        <button
+                          key={m}
+                          className={`log-method-btn ${logMethod === m ? 'active' : ''}`}
+                          onClick={() => setLogMethod(m)}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="field" style={{ marginTop: 10 }}>
+                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happened?</label>
+                      <textarea
+                        value={logWhatHappened}
+                        onChange={e => setLogWhatHappened(e.target.value)}
+                        placeholder="Describe the conversation, outcome, objections..."
+                        rows={3}
+                        autoFocus
+                      />
+                    </div>
+
+                    <div className="field">
+                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happens next?</label>
+                      <input
+                        value={logWhatNext}
+                        onChange={e => setLogWhatNext(e.target.value)}
+                        placeholder="Specific next step..."
+                      />
+                    </div>
+
+                    <div className="field">
+                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>Due date</label>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button className={`quick-date-btn ${logDue === quickDate(1) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(1))}>Tomorrow</button>
+                        <button className={`quick-date-btn ${logDue === quickDate(3) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(3))}>+3 days</button>
+                        <button className={`quick-date-btn ${logDue === quickDate(7) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(7))}>+7 days</button>
+                        <input type="date" value={logDue} onChange={e => setLogDue(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
+                      </div>
+                    </div>
+
+                    <button
+                      className="btn btn-primary btn-sm"
+                      style={{ marginTop: 4, width: '100%' }}
+                      onClick={handleLog}
+                      disabled={!logWhatHappened.trim()}
+                    >
+                      Save Log
+                    </button>
+                  </div>
+                )}
+
+                {/* If AI parse filled the fields, show the pre-filled log form below the dumper */}
+                {showSmartDump && logWhatHappened && (
+                  <div className="log-form log-form-rich" style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', marginBottom: 8 }}>
+                      ✦ AI-filled — review and save
+                    </div>
+                    <div className="log-method-row">
+                      {LOG_METHODS.map(m => (
+                        <button key={m} className={`log-method-btn ${logMethod === m ? 'active' : ''}`} onClick={() => setLogMethod(m)}>{m}</button>
+                      ))}
+                    </div>
+                    <div className="field" style={{ marginTop: 8 }}>
+                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happened?</label>
+                      <textarea value={logWhatHappened} onChange={e => setLogWhatHappened(e.target.value)} rows={3} />
+                    </div>
+                    <div className="field">
+                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happens next?</label>
+                      <input value={logWhatNext} onChange={e => setLogWhatNext(e.target.value)} />
+                    </div>
+                    <div className="field">
+                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>Due date</label>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button className={`quick-date-btn ${logDue === quickDate(1) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(1))}>Tomorrow</button>
+                        <button className={`quick-date-btn ${logDue === quickDate(3) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(3))}>+3 days</button>
+                        <button className={`quick-date-btn ${logDue === quickDate(7) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(7))}>+7 days</button>
+                        <input type="date" value={logDue} onChange={e => setLogDue(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
+                      </div>
+                    </div>
+                    <button className="btn btn-primary btn-sm" style={{ marginTop: 4, width: '100%' }} onClick={handleLog} disabled={!logWhatHappened.trim()}>
+                      Save Log
+                    </button>
                   </div>
                 )}
               </div>
             )}
 
-            {showLogForm && (
-              <div className="log-form log-form-rich">
-                <div className="log-method-row">
-                  {LOG_METHODS.map(m => (
-                    <button
-                      key={m}
-                      className={`log-method-btn ${logMethod === m ? 'active' : ''}`}
-                      onClick={() => setLogMethod(m)}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="field" style={{ marginTop: 10 }}>
-                  <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happened?</label>
-                  <textarea
-                    value={logWhatHappened}
-                    onChange={e => setLogWhatHappened(e.target.value)}
-                    placeholder="Describe the conversation, outcome, objections..."
-                    rows={3}
-                    autoFocus
-                  />
-                </div>
-
-                <div className="field">
-                  <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happens next?</label>
-                  <input
-                    value={logWhatNext}
-                    onChange={e => setLogWhatNext(e.target.value)}
-                    placeholder="Specific next step..."
-                  />
-                </div>
-
-                <div className="field">
-                  <label style={{ fontSize: 12, color: 'var(--text2)' }}>Due date</label>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <button className={`quick-date-btn ${logDue === quickDate(1) ? 'active' : ''}`}
-                      onClick={() => setLogDue(quickDate(1))}>Tomorrow</button>
-                    <button className={`quick-date-btn ${logDue === quickDate(3) ? 'active' : ''}`}
-                      onClick={() => setLogDue(quickDate(3))}>+3 days</button>
-                    <button className={`quick-date-btn ${logDue === quickDate(7) ? 'active' : ''}`}
-                      onClick={() => setLogDue(quickDate(7))}>+7 days</button>
-                    <input
-                      type="date"
-                      value={logDue}
-                      onChange={e => setLogDue(e.target.value)}
-                      style={{ flex: 1, minWidth: 120 }}
-                    />
-                  </div>
-                </div>
-
-                <button className="btn btn-primary btn-sm" style={{ marginTop: 4, width: '100%' }} onClick={handleLog}
-                  disabled={!logWhatHappened.trim()}>
-                  Save Log
-                </button>
+            {/* ── Tab: History ── */}
+            {rightTab === 'History' && (
+              <div className="history-list">
+                {contactLogs.length === 0 ? (
+                  <div className="empty-history">No contact history yet</div>
+                ) : (
+                  contactLogs.map(log => renderLogEntry(log))
+                )}
               </div>
             )}
 
-            <div className="history-list">
-              {contactLogs.length === 0 ? (
-                <div className="empty-history">No contact history yet</div>
-              ) : (
-                contactLogs.map(log => renderLogEntry(log))
-              )}
-            </div>
+            {/* ── Tab: AI Intel ── */}
+            {rightTab === 'AI Intel' && (
+              <LeadIntelligencePanel client={client} contactLogs={contactLogs} />
+            )}
           </div>
         </div>
 
-        {/* Actions */}
+        {/* ── Footer actions ── */}
         <div className="modal-actions">
           <button className="btn btn-danger btn-sm" onClick={() => onDelete(client.id)} disabled={saving}>
             Delete
@@ -366,12 +455,11 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
             ✓ Saved
           </span>
           <button className="btn btn-secondary" onClick={() => {
-            if (isDirty) {
-              if (window.confirm('You have unsaved changes. Close anyway?')) onClose()
-            } else {
-              onClose()
-            }
-          }}>Cancel</button>
+            if (isDirty) { if (window.confirm('You have unsaved changes. Close anyway?')) onClose() }
+            else onClose()
+          }}>
+            Cancel
+          </button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
             {saving ? 'Saving...' : 'Save'} <span style={{ opacity: 0.6, fontSize: 11 }}>⌘S</span>
           </button>

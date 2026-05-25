@@ -6,7 +6,7 @@
 // would cause the function to be killed mid-wait, returning a confusing 500.
 // The frontend (src/gemini.js) handles retry with a visible countdown instead.
 
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
 
 const SYSTEM_PROMPT = `You are a sharp, direct sales intelligence assistant for OpsCraft — 
 an operations consulting company selling to Indian B2B clients 

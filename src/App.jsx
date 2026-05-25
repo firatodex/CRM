@@ -203,12 +203,6 @@ export default function App() {
     setDraggedClient(null)
   }, [draggedClient])
 
-  // Count contact logs per client — passed to cards for effort scoring and decision engine
-  const logCountMap = contactLogs.reduce((acc, log) => {
-    acc[log.client_id] = (acc[log.client_id] || 0) + 1
-    return acc
-  }, {})
-
   const pipelineClients = clients.filter(c => !['active', 'dead'].includes(c.stage))
   const activeClients   = clients.filter(c => c.stage === 'active')
   const deadClients     = clients.filter(c => c.stage === 'dead')
@@ -302,7 +296,6 @@ export default function App() {
                 onDragStart={setDraggedClient}
                 onDrop={handleDrop}
                 isDragTarget={!!draggedClient && draggedClient.stage !== stage.key}
-                logCountMap={logCountMap}
               />
             ))}
           </div>

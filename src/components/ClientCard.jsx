@@ -1,11 +1,22 @@
 import { formatDue, formatRelativeTime, formatCurrency, waLink } from '../utils'
 import { TEMPERATURES } from '../stages'
+import {
+  getDecision, getEffortScore, getStaleness,
+  getStalenessColor, getDecisionStyle, getEffortColor
+} from '../decisionEngine'
 
-export default function ClientCard({ client, onClick, onDragStart }) {
-  const due = client.next_action_due ? formatDue(client.next_action_due) : null
-  const wa = waLink(client.phone)
-  const temp = TEMPERATURES.find(t => t.key === client.temperature)
+export default function ClientCard({ client, onClick, onDragStart, logCount = 0 }) {
+  const due        = client.next_action_due ? formatDue(client.next_action_due) : null
+  const wa         = waLink(client.phone)
+  const temp       = TEMPERATURES.find(t => t.key === client.temperature)
   const lastContact = formatRelativeTime(client.last_contacted_at)
+
+  // Decision engine — instant, no API call
+  const decision   = getDecision(client, logCount)
+  const ds         = getDecisionStyle(decision)
+  const effortScore = getEffortScore(client, logCount)
+  const staleness  = getStaleness(client.last_contacted_at)
+  const stalenessColor = getStalenessColor(staleness)
 
   return (
     <div
@@ -16,7 +27,9 @@ export default function ClientCard({ client, onClick, onDragStart }) {
         e.dataTransfer.effectAllowed = 'move'
         onDragStart(client)
       }}
+      style={stalenessColor ? { background: stalenessColor, borderColor: 'transparent' } : {}}
     >
+      {/* Top row: name + WhatsApp */}
       <div className="card-top-row">
         <div className="card-name-row">
           {temp && <span className="temp-badge" title={temp.label}>{temp.emoji}</span>}
@@ -44,17 +57,56 @@ export default function ClientCard({ client, onClick, onDragStart }) {
         </div>
       )}
 
-      {client.potential_revenue && (
-        <div className="card-revenue">{formatCurrency(client.potential_revenue)}</div>
-      )}
+      {/* Revenue + decision badge on same row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        {client.potential_revenue ? (
+          <span className="card-revenue" style={{ margin: 0 }}>
+            {formatCurrency(client.potential_revenue)}
+          </span>
+        ) : (
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>No revenue set</span>
+        )}
+
+        {/* Decision badge — instant, no API */}
+        {ds && (
+          <span style={{
+            fontSize: 10, fontWeight: 800, padding: '2px 7px',
+            borderRadius: 20, letterSpacing: '0.3px',
+            background: ds.bg, color: ds.color,
+            border: '1px solid ' + ds.border,
+            flexShrink: 0,
+          }}>
+            {decision}
+          </span>
+        )}
+      </div>
 
       {client.next_action && (
         <div className="card-action">{client.next_action}</div>
       )}
 
+      {/* Footer: due date + effort score + last contact */}
       <div className="card-footer">
-        {due && <span className={`card-due ${due.cls}`}>{due.label}</span>}
-        {lastContact && <span className="card-last-contact">Last: {lastContact}</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          {due && <span className={`card-due ${due.cls}`}>{due.label}</span>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {/* Effort/value score — lower is worse */}
+          {effortScore !== null && (
+            <span
+              title={`Effort score: ${effortScore}/100 — revenue vs interactions ratio`}
+              style={{
+                fontSize: 10, fontWeight: 700,
+                color: getEffortColor(effortScore),
+              }}
+            >
+              {logCount}× {effortScore < 40 ? '⚠' : ''}
+            </span>
+          )}
+          {lastContact && (
+            <span className="card-last-contact">{lastContact}</span>
+          )}
+        </div>
       </div>
     </div>
   )

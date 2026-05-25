@@ -1,8 +1,13 @@
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${API_KEY}`
+
+// Fix 5: Updated to gemini-2.0-flash on v1beta which supports systemInstruction,
+// JSON mode, and responseSchema — all features used below.
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`
 
 // ─── System prompt — your business DNA ───────────────────────────
-// This travels with EVERY Gemini call. Edit this to match your business.
+// Fix 1: This is now passed via the native `systemInstruction` field in the
+// request body instead of being prepended to the user prompt string.
+// Benefits: cacheable (cheaper), higher attention priority, injection-resistant.
 const SYSTEM_PROMPT = `
 You are a sharp, direct sales intelligence assistant for OpsCraft — 
 an operations consulting company selling to Indian B2B clients 
@@ -36,8 +41,27 @@ OUTPUT RULES:
 - Always show your reasoning so the user can verify it.
 `
 
+// ─── Safe ISO date math ───────────────────────────────────────────
+// Fix 4: Always parse from raw ISO string. Guard against Invalid Date
+// in case the value was pre-formatted somewhere upstream.
+function safeDaysSince(isoString) {
+  if (!isoString) return null
+  const d = new Date(isoString)
+  if (isNaN(d.getTime())) return null
+  return Math.floor((Date.now() - d.getTime()) / 86400000)
+}
+
+function safeLocalDate(isoString) {
+  if (!isoString) return 'Never'
+  const d = new Date(isoString)
+  if (isNaN(d.getTime())) return 'Unknown'
+  return d.toLocaleDateString('en-IN')
+}
+
 // ─── Build the full context for a lead ───────────────────────────
 function buildLeadContext(client, contactLogs) {
+  const daysSince = safeDaysSince(client.last_contacted_at)
+
   const profile = `
 LEAD PROFILE:
 - Name: ${client.name}
@@ -48,13 +72,9 @@ LEAD PROFILE:
 - Source: ${client.source || 'Unknown'}
 - Potential revenue: ${client.potential_revenue ? '₹' + client.potential_revenue : 'Not set'}
 - Pain point: ${client.pain_point || 'Not recorded'}
-- In pipeline since: ${new Date(client.created_at).toLocaleDateString('en-IN')}
-- Last contacted: ${client.last_contacted_at 
-    ? new Date(client.last_contacted_at).toLocaleDateString('en-IN') 
-    : 'Never'}
-- Days since last contact: ${client.last_contacted_at 
-    ? Math.floor((Date.now() - new Date(client.last_contacted_at)) / 86400000)
-    : 'Never contacted'}
+- In pipeline since: ${safeLocalDate(client.created_at)}
+- Last contacted: ${safeLocalDate(client.last_contacted_at)}
+- Days since last contact: ${daysSince !== null ? daysSince : 'Never contacted'}
 - Current next action: ${client.next_action || 'None set'}
 - Next action due: ${client.next_action_due || 'No date'}
 `
@@ -63,7 +83,7 @@ LEAD PROFILE:
     ? 'CONTACT HISTORY: No contact history yet.'
     : `CONTACT HISTORY (${contactLogs.length} interactions, oldest first):
 ${[...contactLogs].reverse().map((log, i) => {
-  const date = new Date(log.contacted_at).toLocaleDateString('en-IN')
+  const date = safeLocalDate(log.contacted_at)
   const happened = log.note_what_happened || log.note || ''
   const next = log.note_what_next || ''
   return `
@@ -75,42 +95,45 @@ ${next ? `What was planned next: ${next}` : ''}`
   return `${profile}\n${history}`
 }
 
-// ─── Core API call with automatic retry on rate limit ────────────
-async function callGemini(prompt, retryCount = 0) {
-  if (!API_KEY) throw new Error('Gemini API key not configured. Add VITE_GEMINI_API_KEY in Vercel environment variables.')
+// ─── Core API call ────────────────────────────────────────────────
+// Fix 1: systemInstruction at root level — not concatenated into contents.
+// Fix 2: accepts genConfigOverride so callers can pass responseMimeType/responseSchema.
+// Fix 3: reads Retry-After header instead of regexing the error message body.
+async function callGemini(userPrompt, genConfigOverride = {}, retryCount = 0) {
+  if (!API_KEY) {
+    throw new Error('Gemini API key not configured. Add VITE_GEMINI_API_KEY in Vercel environment variables.')
+  }
 
   const response = await fetch(API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [{ parts: [{ text: userPrompt }] }],
       generationConfig: {
         temperature: 0.3,
         maxOutputTokens: 800,
+        ...genConfigOverride,
       }
     })
   })
 
-  // Rate limit hit (429) — wait and retry automatically up to 3 times
+  // Fix 3: use standard HTTP Retry-After header, not error message regex
   if (response.status === 429) {
     if (retryCount >= 3) {
       throw new Error('Rate limit reached. You have made too many AI requests in the last minute. Wait 30 seconds and try again.')
     }
-    // Extract retry delay from Google's response if available, else use backoff
-    const err = await response.json().catch(() => ({}))
-    const retryAfterMs = (() => {
-      const msg = err?.error?.message || ''
-      const match = msg.match(/retry in ([\d.]+)s/)
-      return match ? Math.ceil(parseFloat(match[1])) * 1000 : (retryCount + 1) * 10000
-    })()
+    const retryAfterHeader = response.headers.get('Retry-After')
+    const retryAfterMs = retryAfterHeader
+      ? parseInt(retryAfterHeader, 10) * 1000
+      : (retryCount + 1) * 10000
     await new Promise(r => setTimeout(r, retryAfterMs))
-    return callGemini(prompt, retryCount + 1)
+    return callGemini(userPrompt, genConfigOverride, retryCount + 1)
   }
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}))
     const msg = err?.error?.message || `API error ${response.status}`
-    // Make common errors readable
     if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) {
       throw new Error('Invalid API key. Check VITE_GEMINI_API_KEY in your Vercel environment variables.')
     }
@@ -121,13 +144,11 @@ async function callGemini(prompt, retryCount = 0) {
   return data.candidates?.[0]?.content?.parts?.[0]?.text || ''
 }
 
-// ─── Feature 1: Lead Summary + Next Action + Psychological flags ──
+// ─── Feature 1: Lead intelligence — plain text structured output ──
 export async function getLeadIntelligence(client, contactLogs) {
   const context = buildLeadContext(client, contactLogs)
-  
-  const prompt = `
-${SYSTEM_PROMPT}
 
+  const prompt = `
 ${context}
 
 YOUR TASK:
@@ -159,13 +180,13 @@ REASONING: [One sentence explaining the urgency level]
   return await callGemini(prompt)
 }
 
-// ─── Feature 2: Parse raw call notes into structured fields ───────
+// ─── Feature 2: Parse raw call notes into structured JSON ─────────
+// Fix 2: native JSON mode via responseMimeType + responseSchema.
+// The API guarantees clean JSON — no regex stripping, no backtick cleaning needed.
 export async function parseCallNote(rawNote, client, contactLogs) {
   const context = buildLeadContext(client, contactLogs)
 
   const prompt = `
-${SYSTEM_PROMPT}
-
 ${context}
 
 NEW RAW NOTE FROM TODAY'S CALL:
@@ -173,39 +194,38 @@ NEW RAW NOTE FROM TODAY'S CALL:
 
 YOUR TASK:
 Extract structured information from this raw note.
-Respond ONLY with valid JSON, no explanation, no markdown, no backticks.
 Use null for any field you cannot confidently extract.
-
-{
-  "what_happened": "clean summary of what occurred in this interaction",
-  "what_next": "specific next action extracted or inferred",
-  "suggested_due_date_days": null,
-  "suggested_stage": null,
-  "suggested_temperature": null,
-  "new_pain_point": null,
-  "decision_maker_mentioned": null,
-  "buying_signal_detected": false,
-  "stall_detected": false,
-  "key_insight": "one sentence — the most important thing to know from this call"
-}
-
-Rules:
-- suggested_stage must be one of: lead, contacted, proposal, active, dead — or null
-- suggested_temperature must be one of: hot, warm, cold — or null  
-- suggested_due_date_days is an integer (e.g. 3 for "in 3 days") or null
-- Only suggest stage/temperature changes if the note clearly justifies it
-- decision_maker_mentioned: name if a new decision maker was mentioned, else null
+Only suggest stage or temperature changes if the note clearly justifies it.
+decision_maker_mentioned: person's name if a new decision maker was mentioned, else null.
+suggested_due_date_days: integer number of days from today, or null.
+suggested_stage must be one of: lead, contacted, proposal, active, dead — or null.
+suggested_temperature must be one of: hot, warm, cold — or null.
 `
 
-  const raw = await callGemini(prompt)
-  
-  // Strip any accidental markdown formatting before parsing
-  const cleaned = raw.replace(/```json|```/g, '').trim()
-  
+  const jsonConfig = {
+    responseMimeType: 'application/json',
+    responseSchema: {
+      type: 'object',
+      properties: {
+        what_happened:            { type: 'string' },
+        what_next:                { type: 'string',  nullable: true },
+        suggested_due_date_days:  { type: 'integer', nullable: true },
+        suggested_stage:          { type: 'string',  nullable: true },
+        suggested_temperature:    { type: 'string',  nullable: true },
+        new_pain_point:           { type: 'string',  nullable: true },
+        decision_maker_mentioned: { type: 'string',  nullable: true },
+        buying_signal_detected:   { type: 'boolean' },
+        stall_detected:           { type: 'boolean' },
+        key_insight:              { type: 'string',  nullable: true },
+      },
+      required: ['what_happened', 'buying_signal_detected', 'stall_detected']
+    }
+  }
+
   try {
-    return JSON.parse(cleaned)
+    const raw = await callGemini(prompt, jsonConfig)
+    return JSON.parse(raw)
   } catch {
-    // If JSON parse fails, return a safe fallback
     return {
       what_happened: rawNote,
       what_next: null,
@@ -217,7 +237,7 @@ Rules:
       buying_signal_detected: false,
       stall_detected: false,
       key_insight: null,
-      parse_error: true
+      parse_error: true,
     }
   }
 }

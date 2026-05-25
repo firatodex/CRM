@@ -1,11 +1,7 @@
 // api/gemini.js — Vercel Serverless Function
-//
-// Lives at /api/gemini.js in the repo root (NOT inside /src).
-// Vercel auto-deploys this as a serverless endpoint at /api/gemini.
-//
-// The API key is stored as GEMINI_API_KEY (no VITE_ prefix) in Vercel
-// environment variables. It never reaches the browser bundle.
-// This also bypasses CORS — the Retry-After header is readable server-side.
+// Uses CommonJS exports (module.exports) instead of ES module export default
+// because package.json has "type": "module" which causes conflicts with
+// Vercel's Node.js serverless runtime when using export default syntax.
 
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`
 
@@ -35,14 +31,13 @@ SALES FRAMEWORK YOU FOLLOW:
 OUTPUT RULES:
 - Be direct. One clear recommendation, not a list of options.
 - Only draw conclusions from the contact history provided.
-- Never invent details not in the logs. 
+- Never invent details not in the logs.
 - If inferring, say "Based on the logs..."
 - If uncertain, say so explicitly.
 - Keep responses concise — a busy salesperson reads this between calls.
 - Always show your reasoning so the user can verify it.
 `
 
-// Safe date helpers — guard against pre-formatted or invalid date strings
 function safeDaysSince(isoString) {
   if (!isoString) return null
   const d = new Date(isoString)
@@ -59,7 +54,6 @@ function safeLocalDate(isoString) {
 
 function buildLeadContext(client, contactLogs) {
   const daysSince = safeDaysSince(client.last_contacted_at)
-
   const profile = `
 LEAD PROFILE:
 - Name: ${client.name}
@@ -76,7 +70,6 @@ LEAD PROFILE:
 - Current next action: ${client.next_action || 'None set'}
 - Next action due: ${client.next_action_due || 'No date'}
 `
-
   const history = contactLogs.length === 0
     ? 'CONTACT HISTORY: No contact history yet.'
     : `CONTACT HISTORY (${contactLogs.length} interactions, oldest first):
@@ -92,64 +85,60 @@ ${next ? `What was planned next: ${next}` : ''}`
   return `${profile}\n${history}`
 }
 
-// Core Gemini call — runs server-side so Retry-After header is fully readable
-async function callGemini(userPrompt, genConfigOverride = {}, retryCount = 0) {
+async function callGemini(userPrompt, genConfigOverride, retryCount) {
+  retryCount = retryCount || 0
+  genConfigOverride = genConfigOverride || {}
+
   const response = await fetch(API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
       contents: [{ parts: [{ text: userPrompt }] }],
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 800,
-        ...genConfigOverride,
-      }
+      generationConfig: Object.assign({ temperature: 0.3, maxOutputTokens: 800 }, genConfigOverride)
     })
   })
 
   if (response.status === 429) {
-    if (retryCount >= 3) {
-      throw new Error('Rate limit reached. Wait 30 seconds and try again.')
-    }
-    // Running server-side: Retry-After header is fully accessible (no CORS stripping)
+    if (retryCount >= 3) throw new Error('Rate limit reached. Wait 30 seconds and try again.')
     const retryAfterHeader = response.headers.get('Retry-After')
     const retryAfterMs = retryAfterHeader
       ? parseInt(retryAfterHeader, 10) * 1000
       : (retryCount + 1) * 10000
-    await new Promise(r => setTimeout(r, retryAfterMs))
+    await new Promise(function(r) { setTimeout(r, retryAfterMs) })
     return callGemini(userPrompt, genConfigOverride, retryCount + 1)
   }
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    throw new Error(err?.error?.message || `Gemini API error ${response.status}`)
+    const err = await response.json().catch(function() { return {} })
+    throw new Error(err && err.error && err.error.message ? err.error.message : 'Gemini API error ' + response.status)
   }
 
   const data = await response.json()
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+  return data.candidates && data.candidates[0] && data.candidates[0].content &&
+    data.candidates[0].content.parts && data.candidates[0].content.parts[0]
+    ? data.candidates[0].content.parts[0].text
+    : ''
 }
 
-// ─── Vercel handler ───────────────────────────────────────────────
-export default async function handler(req, res) {
-  // Only allow POST
+module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  // Key check — fails loudly in Vercel logs, not in the browser
   if (!process.env.GEMINI_API_KEY) {
     return res.status(500).json({ error: 'GEMINI_API_KEY not set in Vercel environment variables' })
   }
 
-  const { feature, client, contactLogs, rawNote } = req.body
+  const feature = req.body.feature
+  const client = req.body.client
+  const contactLogs = req.body.contactLogs || []
+  const rawNote = req.body.rawNote
 
   try {
     if (feature === 'intelligence') {
-      // Feature 1: full lead analysis — plain text structured output
       const context = buildLeadContext(client, contactLogs)
-      const prompt = `
-${context}
+      const prompt = context + `
 
 YOUR TASK:
 Analyze this lead and give me a structured intelligence report.
@@ -177,13 +166,11 @@ URGENCY LEVEL: [High / Medium / Low — one word only]
 REASONING: [One sentence explaining the urgency level]
 `
       const result = await callGemini(prompt)
-      return res.status(200).json({ result })
+      return res.status(200).json({ result: result })
 
     } else if (feature === 'parse') {
-      // Feature 2: parse raw notes — native JSON mode with schema enforcement
       const context = buildLeadContext(client, contactLogs)
-      const prompt = `
-${context}
+      const prompt = context + `
 
 NEW RAW NOTE FROM TODAY'S CALL:
 "${rawNote}"

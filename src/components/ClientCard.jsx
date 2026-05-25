@@ -1,11 +1,25 @@
 import { formatDue, formatRelativeTime, formatCurrency, waLink } from '../utils'
 import { TEMPERATURES } from '../stages'
 
+// Staleness tint only — a subtle background shift so stale leads
+// stand out visually without making any judgment calls.
+function getStalenessStyle(lastContactedAt) {
+  if (!lastContactedAt) return {}
+  const d = new Date(lastContactedAt)
+  if (isNaN(d.getTime())) return {}
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000)
+  if (days <= 5)  return {}
+  if (days <= 10) return { background: 'rgba(255,149,0,0.06)' }   // subtle amber
+  if (days <= 21) return { background: 'rgba(255,59,48,0.07)' }   // subtle red
+  return           { background: 'rgba(255,59,48,0.13)' }         // deeper red
+}
+
 export default function ClientCard({ client, onClick, onDragStart }) {
-  const due = client.next_action_due ? formatDue(client.next_action_due) : null
-  const wa = waLink(client.phone)
-  const temp = TEMPERATURES.find(t => t.key === client.temperature)
+  const due        = client.next_action_due ? formatDue(client.next_action_due) : null
+  const wa         = waLink(client.phone)
+  const temp       = TEMPERATURES.find(t => t.key === client.temperature)
   const lastContact = formatRelativeTime(client.last_contacted_at)
+  const stalenessStyle = getStalenessStyle(client.last_contacted_at)
 
   return (
     <div
@@ -16,6 +30,7 @@ export default function ClientCard({ client, onClick, onDragStart }) {
         e.dataTransfer.effectAllowed = 'move'
         onDragStart(client)
       }}
+      style={stalenessStyle}
     >
       <div className="card-top-row">
         <div className="card-name-row">

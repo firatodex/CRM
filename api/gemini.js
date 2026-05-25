@@ -1,39 +1,53 @@
-// api/gemini.js — Vercel Serverless Function
-// 
-// DESIGN DECISION: This function is a pure proxy — it makes ONE request to
-// Google and immediately returns the result, including 429 rate limit errors.
-// It does NOT retry. Retrying server-side on Vercel hobby plan (10s timeout)
-// would cause the function to be killed mid-wait, returning a confusing 500.
-// The frontend (src/gemini.js) handles retry with a visible countdown instead.
+// api/gemini.js — Vercel Serverless Function (pure proxy, no retry)
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
 
-const SYSTEM_PROMPT = `You are a sharp, direct sales intelligence assistant for OpsCraft — 
-an operations consulting company selling to Indian B2B clients 
+const SYSTEM_PROMPT = `You are a revenue operator, not an analyst, for OpsCraft —
+an operations consulting company selling to Indian B2B clients
 (solar EPCs, FMCG distributors, manufacturers, traders).
 
-BUSINESS CONTEXT:
-- Typical deal size: Rs 18K to Rs 2L
+Your job is not to summarize. Your job is to make a decision and defend it.
+
+BUSINESS REALITY:
+- Minimum viable deal: Rs 18K. Below this, the economics rarely justify the time.
+- Typical deal: Rs 18K to Rs 2L
 - Sales cycle: 2 to 8 weeks
-- Common objections: budget timing, needs boss approval, already has a solution, will think about it
-- Clients are often price-sensitive but respond to ROI framing
-- WhatsApp is the primary communication channel
-- Decision makers are often not the first point of contact
+- Every hour spent on a bad lead is an hour stolen from a good one.
+- WhatsApp is the primary channel. Decision makers are rarely the first contact.
+- Common stalls: budget timing, boss approval needed, already has a solution, will think about it.
 
-SALES FRAMEWORK:
-- Use SPIN principles: Situation, Problem, Implication, Need-Payoff
-- Flag stall patterns: 3+ logs with no stage movement = stalled deal
-- Detect buying signals: delivery timelines, contract questions, price negotiation
-- Always identify if contact is the actual decision maker
-- Suggest pattern-break moves for stalled leads instead of more follow-ups
-- Flag effort vs potential mismatch (many calls on small deal)
+DECISION FRAMEWORK — you must always output one of three verdicts:
+- PUSH: High potential, real buying signals, pursue actively right now.
+- PARK: Some potential but not ready. One passive touchpoint, then leave it.
+- DROP: Economics do not justify further time. Close it, move on.
 
-OUTPUT RULES:
-- Be direct. One clear recommendation, not a list of options.
-- Only draw conclusions from the contact history provided.
-- Never invent details not in the logs.
-- If inferring, say Based on the logs...
-- Keep responses concise.`
+WHEN TO RECOMMEND DROP (be ruthless):
+- Potential revenue is significantly below Rs 18K minimum viable deal.
+- 3+ interactions with zero stage movement AND no clear buying signal.
+- Objections repeating across multiple logs with no new information.
+- Contact is clearly not the decision maker and has made no effort to connect you.
+- Effort already spent likely exceeds or matches deal upside.
+
+WHEN TO RECOMMEND PARK:
+- Real interest but wrong timing (budget in 2-3 months, seasonal business, etc.)
+- Deal size is viable but urgency is low.
+- One specific future trigger exists.
+
+WHEN TO RECOMMEND PUSH:
+- Buying signals present: delivery timelines, pricing questions, contract talk, new stakeholder introduced.
+- Decision maker is engaged.
+- Deal size justifies intensity.
+
+CRITICAL THINKING RULES:
+- Restating inputs = zero value. Your output must contain insight the user does not already have.
+- Always compare potential revenue against the Rs 18K minimum. If below, say it explicitly.
+- If 3+ logs with no stage movement, default bias is DROP unless strong buying signal overrides.
+- Effort vs potential mismatch must be called out directly, not mentioned politely and ignored.
+- You are allowed to say this lead is not worth your time. That is often the most valuable output.
+- Do not hedge. Do not present both sides. Make a call and own it.
+- Only draw conclusions from contact history provided. Never invent facts.
+- If inferring, say: Based on the logs...
+- The WhatsApp draft must match the decision: PUSH = urgent and specific, PARK = low-pressure future hook, DROP = clean professional close.`
 
 function safeDaysSince(iso) {
   if (!iso) return null
@@ -86,7 +100,6 @@ function buildContext(client, logs) {
 }
 
 module.exports = async function handler(req, res) {
-  // CORS headers — allow requests from any origin (it's your own frontend)
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
@@ -97,7 +110,6 @@ module.exports = async function handler(req, res) {
   var key = process.env.GEMINI_API_KEY
   if (!key) return res.status(500).json({ error: 'GEMINI_API_KEY not configured in Vercel environment variables' })
 
-  // Safely parse body — Vercel usually auto-parses JSON but guard against edge cases
   var body = req.body
   if (typeof body === 'string') {
     try { body = JSON.parse(body) } catch (e) {
@@ -116,10 +128,10 @@ module.exports = async function handler(req, res) {
 
   var context = buildContext(client, logs)
   var userPrompt = ''
-  var genConfig = { temperature: 0.3, maxOutputTokens: 800 }
+  var genConfig = { temperature: 0.4, maxOutputTokens: 1000 }
 
   if (feature === 'intelligence') {
-    userPrompt = context + '\n\nYOUR TASK:\nAnalyze this lead and give me a structured intelligence report.\nRespond in this EXACT format:\n\nSITUATION SUMMARY\n[2-3 sentences on where things stand.]\n\nPSYCHOLOGICAL READING\n[Lead mental state, patterns across logs.]\n\nRED FLAGS\n[Warning signs or "None detected".]\n\nBUYING SIGNALS\n[Positive signals or "None detected".]\n\nRECOMMENDED NEXT ACTION\n[One specific action and why.]\n\nSUGGESTED MESSAGE\n[WhatsApp draft. Natural, not corporate. Indian B2B style.]\n\nURGENCY LEVEL: [High / Medium / Low]\nREASONING: [One sentence why.]'
+    userPrompt = context + '\n\nYOUR TASK:\nMake a revenue decision on this lead. Do not summarize what I already know. Give me new insight and a clear verdict.\nRespond in this EXACT format — do not add or remove sections:\n\nDECISION: [PUSH / PARK / DROP]\nREASON: [One brutal sentence. Why this verdict specifically. Reference actual numbers and log evidence.]\n\nSITUATION\n[What is actually happening — not a restatement of fields. What is the real dynamic? Where is this deal stuck or moving?]\n\nPSYCHOLOGICAL READ\n[What is this person actually thinking? Genuinely interested, politely stalling, not the decision maker, price-shopping? What pattern across logs tells you this?]\n\nRED FLAGS\n[Specific warning signs from the logs. Reference actual log entries. Write None if genuinely clean.]\n\nBUYING SIGNALS\n[Specific positive signals from logs. Reference actual entries. Write None if absent.]\n\nNEXT ACTION\n[One action that matches the DECISION. DROP: final message or archive. PARK: one low-effort touchpoint with future date. PUSH: specific urgent move.]\n\nWHATSAPP DRAFT\n[Message that matches DECISION tone. PUSH = urgent and specific. PARK = low pressure, future hook. DROP = clean professional close. Natural Indian B2B language.]'
 
   } else if (feature === 'parse') {
     userPrompt = context + '\n\nNEW RAW NOTE:\n"' + rawNote + '"\n\nExtract structured info. Use null for uncertain fields.\nsuggested_stage: one of lead/contacted/proposal/active/dead or null.\nsuggested_temperature: one of hot/warm/cold or null.\nsuggested_due_date_days: integer or null.'
@@ -155,15 +167,20 @@ module.exports = async function handler(req, res) {
       })
     })
 
-    // Pass 429 straight back to frontend with Retry-After header
-    // Frontend handles the wait + retry with a visible countdown
+    var googleData = await googleRes.json()
+
     if (googleRes.status === 429) {
       var retryAfter = googleRes.headers.get('Retry-After')
       if (retryAfter) res.setHeader('Retry-After', retryAfter)
-      return res.status(429).json({ error: 'Rate limit. Wait and retry.' })
+      var googleMsg = (googleData.error && googleData.error.message) || 'Rate limit hit'
+      var isDaily = googleMsg.toLowerCase().includes('day') || googleMsg.toLowerCase().includes('quota')
+      return res.status(429).json({
+        error: isDaily
+          ? 'Daily quota exhausted. Come back tomorrow or use a different API key.'
+          : 'Rate limit. Wait 1 minute and retry.',
+        isDaily: isDaily
+      })
     }
-
-    var googleData = await googleRes.json()
 
     if (!googleRes.ok) {
       var msg = (googleData.error && googleData.error.message) || ('Gemini error ' + googleRes.status)

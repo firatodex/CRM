@@ -375,7 +375,7 @@ export default function LeadIntelligencePanel({ client, contactLogs }) {
   const ds = decisionStyle[decision] || { bg: 'var(--bg-light)', color: 'var(--text-dark)', border: 'var(--border)', emoji: '⚡' }
 
   return (
-    <div style={{ marginBottom: 12 }}>
+    <div style={{ marginBottom: 12, overflowY: 'auto', maxHeight: '480px', paddingRight: 2 }}>
       {/* DECISION — the most important output, shown first and largest */}
       <div style={{
         background: ds.bg, border: '1.5px solid ' + ds.border,

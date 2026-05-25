@@ -94,7 +94,7 @@ async function callGemini(prompt, retryCount = 0) {
   // Rate limit hit (429) — wait and retry automatically up to 3 times
   if (response.status === 429) {
     if (retryCount >= 3) {
-      throw new Error('Rate limit reached. You've made too many AI requests in the last minute. Wait 30 seconds and try again.')
+      throw new Error('Rate limit reached. You have made too many AI requests in the last minute. Wait 30 seconds and try again.')
     }
     // Extract retry delay from Google's response if available, else use backoff
     const err = await response.json().catch(() => ({}))

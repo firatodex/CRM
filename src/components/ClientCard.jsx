@@ -25,7 +25,7 @@ export default function ClientCard({ client, onClick, onDragStart }) {
         {wa && (
           <a
             href={wa}
-            target="_blank"
+            target="whatsapp"
             rel="noreferrer"
             className="wa-btn"
             onClick={e => e.stopPropagation()}

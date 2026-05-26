@@ -68,7 +68,7 @@ export function waLink(phone) {
   if (digits.length === 10) {
     normalized = '91' + digits
   }
-  return `https://web.whatsapp.com/send?phone=${normalized}`
+  return `https://web.whatsapp.com/send?phone=${normalized}&text=`
 }
 
 export function exportCSV(clients) {

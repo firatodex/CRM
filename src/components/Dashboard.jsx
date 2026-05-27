@@ -33,6 +33,9 @@ function toLocalDateStr(date) {
 // Custom tooltip for the activity chart
 function ActivityTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
+  // Both lines share the same data array — use payload[0].payload
+  // which gives us the full data object for that day regardless of
+  // which line the cursor is closest to
   const d = payload[0].payload
   return (
     <div style={{
@@ -40,10 +43,10 @@ function ActivityTooltip({ active, payload }) {
       borderRadius: 8, padding: '8px 12px', fontSize: 12, boxShadow: 'var(--shadow-sm)'
     }}>
       <div style={{ fontWeight: 600, color: 'var(--text-dark)', marginBottom: 4 }}>{d.fullDate}</div>
-      <div style={{ color: 'var(--primary)' }}>{d.contacts} contact{d.contacts !== 1 ? 's' : ''}</div>
-      {d.avg7 !== null && (
-        <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>7d avg: {d.avg7}</div>
-      )}
+      <div style={{ color: d.contacts > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>
+        {d.contacts} contact{d.contacts !== 1 ? 's' : ''}
+      </div>
+      <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>7d avg: {d.avg7}</div>
     </div>
   )
 }
@@ -121,9 +124,8 @@ export default function Dashboard({ clients, contactLogs }) {
   // line stays honest even when one Sunday shows 0
   const activityData = rawCounts.map((entry, idx) => {
     const window7 = rawCounts.slice(Math.max(0, idx - 6), idx + 1)
-    const avg7 = window7.length >= 3
-      ? Math.round((window7.reduce((s, e) => s + e.contacts, 0) / window7.length) * 10) / 10
-      : null
+    // Compute rolling average from whatever data is available — no minimum threshold
+    const avg7 = Math.round((window7.reduce((s, e) => s + e.contacts, 0) / window7.length) * 10) / 10
 
     const { daysAgo, d, contacts } = entry
     // Show date labels at month boundaries and today

@@ -573,7 +573,32 @@ body {
   animation: modalIn 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
-.modal-lg { width: 780px; }
+/* Large modal (DetailModal) uses flex column so the action bar
+   stays pinned at the bottom — never requires scrolling to Save */
+.modal-lg {
+  width: 780px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden;
+  padding-bottom: 0;
+}
+
+/* Left fields column scrolls independently */
+.modal-lg .detail-fields {
+  overflow-y: auto;
+  max-height: calc(90vh - 180px);
+  padding-right: 4px;
+}
+
+/* Action bar always visible at bottom */
+.modal-lg .modal-actions {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-light);
+  margin: 0 -24px;
+  padding: 12px 24px 16px;
+  background: var(--bg-white);
+  border-radius: 0 0 14px 14px;
+}
 
 @keyframes modalIn {
   from { opacity: 0; transform: scale(0.96) translateY(8px); }
@@ -698,7 +723,7 @@ body {
   background: var(--bg-light);
   border-radius: var(--radius-sm);
   padding: 12px;
-  max-height: 520px;
+  max-height: calc(90vh - 180px);
   overflow-y: auto;
 }
 

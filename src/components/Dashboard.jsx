@@ -1,13 +1,13 @@
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
   ResponsiveContainer, BarChart, Bar, Cell
 } from 'recharts'
 import { PIPELINE_STAGES } from '../stages'
 import { formatCurrency, todayStr } from '../utils'
 
-function StatCard({ label, value, sub, color, accent }) {
+function StatCard({ label, value, sub, color }) {
   return (
-    <div className="dash-metric-card hero-card" style={accent ? { '--card-accent': accent } : {}}>
+    <div className="dash-metric-card hero-card">
       <div className="dash-metric-label">{label}</div>
       <div className="dash-metric-value large" style={color ? { color } : {}}>{value}</div>
       {sub && <div className="dash-metric-sub">{sub}</div>}
@@ -23,6 +23,31 @@ const STAGE_COLORS = {
   dead: '#FF3B30',
 }
 
+function toLocalDateStr(date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const dd = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${dd}`
+}
+
+// Custom tooltip for the activity chart
+function ActivityTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload
+  return (
+    <div style={{
+      background: 'var(--bg-white)', border: '1px solid var(--border-light)',
+      borderRadius: 8, padding: '8px 12px', fontSize: 12, boxShadow: 'var(--shadow-sm)'
+    }}>
+      <div style={{ fontWeight: 600, color: 'var(--text-dark)', marginBottom: 4 }}>{d.fullDate}</div>
+      <div style={{ color: 'var(--primary)' }}>{d.contacts} contact{d.contacts !== 1 ? 's' : ''}</div>
+      {d.avg7 !== null && (
+        <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>7d avg: {d.avg7}</div>
+      )}
+    </div>
+  )
+}
+
 export default function Dashboard({ clients, contactLogs }) {
   const today = todayStr()
 
@@ -33,18 +58,12 @@ export default function Dashboard({ clients, contactLogs }) {
   const pipelineRevenue = pipeline.reduce((s, c) => s + (Number(c.potential_revenue) || 0), 0)
   const activeRevenue   = active.reduce((s, c) => s + (Number(c.potential_revenue) || 0), 0)
 
-  // Win rate: won / (won + lost). Only meaningful once there are closed deals.
   const closedTotal = active.length + dead.length
   const winRate = closedTotal > 0 ? ((active.length / closedTotal) * 100).toFixed(0) : '—'
 
-  // Velocity: avg days from lead creation to FIRST contact log entry (for active clients).
-  // This is a proxy for time-to-first-response, not total deal cycle — which would
-  // require a dedicated `converted_at` timestamp column to compute accurately.
-  // The old calculation measured record age (new Date() - created_at), which is wrong.
   const velocities = active
     .filter(c => c.created_at)
     .map(c => {
-      // Find the earliest contact log for this client
       const clientLogs = contactLogs.filter(l => l.client_id === c.id)
       if (clientLogs.length === 0) return null
       const earliest = clientLogs.reduce((min, l) =>
@@ -58,71 +77,95 @@ export default function Dashboard({ clients, contactLogs }) {
     ? Math.round(velocities.reduce((a, b) => a + b, 0) / velocities.length)
     : null
 
-  // Average deal size (active clients only)
   const dealsWithRevenue = active.filter(c => c.potential_revenue)
   const avgDeal = dealsWithRevenue.length
     ? dealsWithRevenue.reduce((s, c) => s + Number(c.potential_revenue), 0) / dealsWithRevenue.length
     : null
 
-  // Overdue / stale
-  const overdue = pipeline.filter(c => c.next_action_due && c.next_action_due < today)
-  const noAction = pipeline.filter(c => !c.next_action && !['active','dead'].includes(c.stage))
-  const stale = pipeline.filter(c => {
+  const overdue  = pipeline.filter(c => c.next_action_due && c.next_action_due < today)
+  const noAction = pipeline.filter(c => !c.next_action)
+  const stale    = pipeline.filter(c => {
     if (!c.last_contacted_at) return true
     return new Date(c.last_contacted_at) < new Date(Date.now() - 7 * 86400000)
   })
 
-  // This week contacts
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
-  const thisWeekLogs = contactLogs.filter(l => l.contacted_at >= sevenDaysAgo)
-  const lastWeekLogs = contactLogs.filter(l => {
-    const d = l.contacted_at
-    return d < sevenDaysAgo && d >= new Date(Date.now() - 14 * 86400000).toISOString()
-  })
-  const weekTrend = thisWeekLogs.length - lastWeekLogs.length
+  const sevenDaysAgo     = new Date(Date.now() - 7 * 86400000).toISOString()
+  const fourteenDaysAgo  = new Date(Date.now() - 14 * 86400000).toISOString()
+  const thisWeekLogs     = contactLogs.filter(l => l.contacted_at >= sevenDaysAgo)
+  const lastWeekLogs     = contactLogs.filter(l => l.contacted_at < sevenDaysAgo && l.contacted_at >= fourteenDaysAgo)
+  const weekTrend        = thisWeekLogs.length - lastWeekLogs.length
 
-  // Contact activity — last 30 days (local date, not UTC)
-  function toLocalDateStr(date) {
-    const y = date.getFullYear()
-    const m = String(date.getMonth() + 1).padStart(2, '0')
-    const dd = String(date.getDate()).padStart(2, '0')
-    return `${y}-${m}-${dd}`
-  }
+  // ── Activity chart — 90 days ────────────────────────────────────
+  // 90 days shows the full arc: where you started, where you built momentum,
+  // whether today is a trend or a spike.
+  const WINDOW = 90
   const logLocalDates = contactLogs.map(l =>
     l.contacted_at ? toLocalDateStr(new Date(l.contacted_at)) : null
   )
-  const activityData = []
-  for (let i = 29; i >= 0; i--) {
+
+  // Build raw daily counts first
+  const rawCounts = []
+  for (let i = WINDOW - 1; i >= 0; i--) {
     const d = new Date()
     d.setDate(d.getDate() - i)
     const localDate = toLocalDateStr(d)
-    const count = logLocalDates.filter(ld => ld === localDate).length
-    activityData.push({
-      date: i === 0 ? 'Today' : i % 7 === 0
-        ? d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-        : '',
-      fullDate: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-      contacts: count,
+    rawCounts.push({
+      localDate,
+      contacts: logLocalDates.filter(ld => ld === localDate).length,
+      daysAgo: i,
+      d,
     })
   }
-  const totalThisMonth = activityData.reduce((s, d) => s + d.contacts, 0)
-  const peakDay = Math.max(...activityData.map(d => d.contacts), 0)
 
-  // Pipeline stage bar chart
+  // Add 7-day rolling average — smooths out single dead days so the trend
+  // line stays honest even when one Sunday shows 0
+  const activityData = rawCounts.map((entry, idx) => {
+    const window7 = rawCounts.slice(Math.max(0, idx - 6), idx + 1)
+    const avg7 = window7.length >= 3
+      ? Math.round((window7.reduce((s, e) => s + e.contacts, 0) / window7.length) * 10) / 10
+      : null
+
+    const { daysAgo, d, contacts } = entry
+    // Show date labels at month boundaries and today
+    let dateLabel = ''
+    if (daysAgo === 0) dateLabel = 'Today'
+    else if (d.getDate() === 1) dateLabel = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+    else if (daysAgo % 14 === 0) dateLabel = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+
+    return {
+      date: dateLabel,
+      fullDate: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+      contacts,
+      avg7,
+    }
+  })
+
+  const total90     = activityData.reduce((s, d) => s + d.contacts, 0)
+  const peakDay     = Math.max(...activityData.map(d => d.contacts), 0)
+  const total30     = activityData.slice(-30).reduce((s, d) => s + d.contacts, 0)
+  const prev30      = activityData.slice(-60, -30).reduce((s, d) => s + d.contacts, 0)
+  const monthTrend  = prev30 > 0
+    ? Math.round(((total30 - prev30) / prev30) * 100)
+    : null
+
+  // Find personal best week (for psychological impact)
+  let bestWeekStart = null
+  let bestWeekCount = 0
+  for (let i = 0; i <= activityData.length - 7; i++) {
+    const weekCount = activityData.slice(i, i + 7).reduce((s, d) => s + d.contacts, 0)
+    if (weekCount > bestWeekCount) {
+      bestWeekCount = weekCount
+      bestWeekStart = activityData[i].fullDate
+    }
+  }
+
+  // Pipeline stages
   const stageData = PIPELINE_STAGES.map(s => ({
     name: s.label,
     count: clients.filter(c => c.stage === s.key).length,
     color: STAGE_COLORS[s.key],
   }))
 
-  // Funnel conversion rates.
-  // FIXED: The old formula was `to / (from + to)` which is a ratio of current
-  // bucket sizes, not a conversion rate. That number changes whenever you add
-  // a new lead, even if nothing converted.
-  // Correct definition: of all clients who ever passed through stage X,
-  // what fraction reached stage Y?  Because we don't store stage history,
-  // we approximate with: clients at or past stage Y / clients at or past stage X.
-  // "At or past" = in [Y, ...later stages] by pipeline order.
   const stageOrder = ['lead', 'contacted', 'proposal', 'active']
   function atOrPastStage(stageKey) {
     const idx = stageOrder.indexOf(stageKey)
@@ -140,7 +183,6 @@ export default function Dashboard({ clients, contactLogs }) {
     return { label, rate }
   })
 
-  // Top 5 pipeline opportunities by revenue
   const topOpportunities = pipeline
     .filter(c => c.potential_revenue)
     .sort((a, b) => Number(b.potential_revenue) - Number(a.potential_revenue))
@@ -176,42 +218,109 @@ export default function Dashboard({ clients, contactLogs }) {
         />
       </div>
 
-      {/* Row 2: Contact activity (full width) */}
+      {/* Row 2: Activity chart — 90 days */}
       <div className="dash-card" style={{ padding: '18px 20px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
           <div>
-            <div className="dash-card-title" style={{ marginBottom: 2 }}>Contact activity — last 30 days</div>
+            <div className="dash-card-title" style={{ marginBottom: 2 }}>
+              Contact activity — last 90 days
+            </div>
             <div style={{ fontSize: 12, color: 'var(--text-light)' }}>
-              {totalThisMonth} contacts logged · peak {peakDay}/day
+              {total90} total · peak {peakDay}/day
+              {bestWeekCount > 0 && (
+                <span style={{ marginLeft: 10, color: 'var(--text-muted)' }}>
+                  · best week: {bestWeekCount} contacts
+                </span>
+              )}
             </div>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--primary)', letterSpacing: -0.5 }}>{totalThisMonth}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>this month</div>
+          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+            {/* Last 30 vs previous 30 — trend comparison */}
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--primary)', letterSpacing: -0.5 }}>
+                {total30}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>last 30 days</div>
+              {monthTrend !== null && (
+                <div style={{
+                  fontSize: 11, fontWeight: 600, marginTop: 1,
+                  color: monthTrend >= 0 ? 'var(--success)' : 'var(--error)'
+                }}>
+                  {monthTrend >= 0 ? '↑' : '↓'} {Math.abs(monthTrend)}% vs prior 30d
+                </div>
+              )}
+            </div>
           </div>
         </div>
-        <ResponsiveContainer width="100%" height={140}>
+
+        {/* Legend */}
+        <div style={{ display: 'flex', gap: 16, marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)' }}>
+            <div style={{ width: 16, height: 2, background: 'var(--primary)', borderRadius: 1 }} />
+            Daily contacts
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)' }}>
+            <div style={{ width: 16, height: 2, background: 'var(--warning)', borderRadius: 1, opacity: 0.7 }} />
+            7-day average
+          </div>
+        </div>
+
+        <ResponsiveContainer width="100%" height={160}>
           <LineChart data={activityData} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
-            <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
-            <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} allowDecimals={false} />
-            <Tooltip
-              contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border-light)' }}
-              labelFormatter={(_, payload) => payload?.[0]?.payload?.fullDate || ''}
-              formatter={(v) => [v, 'Contacts']}
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 10, fill: 'var(--text-muted)' }}
+              interval={0}
             />
+            <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} allowDecimals={false} />
+            <Tooltip content={<ActivityTooltip />} />
+            {/* Daily contacts — the raw truth */}
             <Line
-              type="monotone" dataKey="contacts" stroke="var(--primary)"
-              strokeWidth={2} dot={false} activeDot={{ r: 4, fill: 'var(--primary)' }}
+              type="monotone"
+              dataKey="contacts"
+              stroke="var(--primary)"
+              strokeWidth={1.5}
+              dot={false}
+              activeDot={{ r: 3, fill: 'var(--primary)' }}
+              opacity={0.7}
+            />
+            {/* 7-day rolling average — the honest trend */}
+            <Line
+              type="monotone"
+              dataKey="avg7"
+              stroke="var(--warning)"
+              strokeWidth={2}
+              dot={false}
+              activeDot={false}
+              strokeDasharray="0"
+              connectNulls
             />
           </LineChart>
         </ResponsiveContainer>
+
+        {/* Psychological context bar */}
+        {monthTrend !== null && (
+          <div style={{
+            marginTop: 10, padding: '8px 12px', borderRadius: 8,
+            background: monthTrend >= 0 ? 'var(--success-bg)' : 'var(--warning-bg)',
+            fontSize: 12,
+            color: monthTrend >= 0 ? '#1A7A3F' : '#854F0B',
+            fontWeight: 500,
+          }}>
+            {monthTrend >= 20
+              ? `🚀 You're ${monthTrend}% more active than last month. Momentum is building.`
+              : monthTrend >= 0
+              ? `↑ ${monthTrend}% more contacts than last month. Staying consistent.`
+              : `↓ ${Math.abs(monthTrend)}% fewer contacts than last month. Time to push harder.`
+            }
+          </div>
+        )}
       </div>
 
       {/* Row 3: Pipeline funnel + urgency + top opportunities */}
       <div className="dash-row">
 
-        {/* Pipeline stage breakdown as bar chart */}
         <div className="dash-card flex-1">
           <div className="dash-card-title">Pipeline stages</div>
           <ResponsiveContainer width="100%" height={160}>
@@ -225,7 +334,6 @@ export default function Dashboard({ clients, contactLogs }) {
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-          {/* Funnel conversion rates */}
           <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
             {funnelRates.map(({ label, rate }) => (
               <div key={label} style={{
@@ -239,7 +347,6 @@ export default function Dashboard({ clients, contactLogs }) {
           </div>
         </div>
 
-        {/* Urgency — what needs action */}
         <div className="dash-card flex-1">
           <div className="dash-card-title">Action required</div>
           <div className="alert-list">
@@ -273,9 +380,7 @@ export default function Dashboard({ clients, contactLogs }) {
               </span>
               <div>
                 <div className="alert-text">No next action set</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                  Leads without a clear next step
-                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Leads without a clear next step</div>
               </div>
             </div>
             {avgVelocity !== null && (
@@ -301,7 +406,6 @@ export default function Dashboard({ clients, contactLogs }) {
           </div>
         </div>
 
-        {/* Top revenue opportunities */}
         <div className="dash-card flex-1">
           <div className="dash-card-title">Top opportunities</div>
           {topOpportunities.length === 0 ? (

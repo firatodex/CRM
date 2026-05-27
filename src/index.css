@@ -573,8 +573,6 @@ body {
   animation: modalIn 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
-/* Large modal (DetailModal) uses flex column so the action bar
-   stays pinned at the bottom — never requires scrolling to Save */
 .modal-lg {
   width: 780px;
   display: flex;
@@ -583,14 +581,13 @@ body {
   padding-bottom: 0;
 }
 
-/* Left fields column scrolls independently */
+/* Left fields: no scrollbar — full content visible, modal itself clips */
 .modal-lg .detail-fields {
-  overflow-y: auto;
-  max-height: calc(90vh - 180px);
-  padding-right: 4px;
+  overflow-y: visible;
+  padding-right: 0;
 }
 
-/* Action bar always visible at bottom */
+/* Action bar always pinned at bottom */
 .modal-lg .modal-actions {
   flex-shrink: 0;
   border-top: 1px solid var(--border-light);
@@ -711,20 +708,29 @@ body {
   display: grid;
   grid-template-columns: 1fr 280px;
   gap: 20px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 @media (max-width: 700px) {
   .detail-grid { grid-template-columns: 1fr; }
 }
 
-.detail-fields { min-width: 0; }
+.detail-fields {
+  min-width: 0;
+  overflow-y: auto;
+  padding-right: 12px;
+  /* Use padding instead of scrollbar gutter to avoid content overlap */
+  scrollbar-gutter: stable;
+}
 
 .detail-history {
   background: var(--bg-light);
   border-radius: var(--radius-sm);
   padding: 12px;
-  max-height: calc(90vh - 180px);
   overflow-y: auto;
+  min-height: 0;
 }
 
 .history-header {

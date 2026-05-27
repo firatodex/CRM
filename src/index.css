@@ -574,20 +574,22 @@ body {
 }
 
 .modal-lg {
-  width: 780px;
+  width: 820px;
   display: flex;
   flex-direction: column;
   overflow-y: hidden;
   padding-bottom: 0;
 }
 
-/* Left fields scroll independently so Notes is always reachable */
+/* Left fields scroll independently so Notes is always reachable.
+   padding-right pushes content away from the scrollbar track.
+   The extra 20px on modal width compensates so fields don't shrink. */
 .modal-lg .detail-fields {
-  overflow-y: auto;
+  overflow-y: scroll;
   max-height: calc(90vh - 200px);
-  padding-right: 4px;
+  padding-right: 14px;
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--border-light) transparent;
 }
 
 /* Action bar always pinned at bottom */
@@ -722,19 +724,16 @@ body {
 
 .detail-fields {
   min-width: 0;
-  overflow-y: auto;
-  /* Reserve space for scrollbar so it never overlaps form content */
-  padding-right: 4px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
 }
 
 .detail-history {
   background: var(--bg-light);
   border-radius: var(--radius-sm);
   padding: 12px;
-  overflow-y: auto;
+  overflow-y: hidden;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .history-header {
@@ -1284,6 +1283,9 @@ body {
 }
 .detail-history-wide {
   min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Log form rich ── */

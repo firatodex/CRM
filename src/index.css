@@ -581,10 +581,13 @@ body {
   padding-bottom: 0;
 }
 
-/* Left fields: no scrollbar — full content visible, modal itself clips */
+/* Left fields scroll independently so Notes is always reachable */
 .modal-lg .detail-fields {
-  overflow-y: visible;
-  padding-right: 0;
+  overflow-y: auto;
+  max-height: calc(90vh - 200px);
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 
 /* Action bar always pinned at bottom */
@@ -720,9 +723,10 @@ body {
 .detail-fields {
   min-width: 0;
   overflow-y: auto;
-  padding-right: 12px;
-  /* Use padding instead of scrollbar gutter to avoid content overlap */
-  scrollbar-gutter: stable;
+  /* Reserve space for scrollbar so it never overlaps form content */
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 
 .detail-history {

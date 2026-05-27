@@ -124,19 +124,16 @@ export default function Dashboard({ clients, contactLogs }) {
   // line stays honest even when one Sunday shows 0
   const activityData = rawCounts.map((entry, idx) => {
     const window7 = rawCounts.slice(Math.max(0, idx - 6), idx + 1)
-    // Compute rolling average from whatever data is available — no minimum threshold
     const avg7 = Math.round((window7.reduce((s, e) => s + e.contacts, 0) / window7.length) * 10) / 10
-
     const { daysAgo, d, contacts } = entry
-    // Show date labels at month boundaries and today
-    let dateLabel = ''
-    if (daysAgo === 0) dateLabel = 'Today'
-    else if (d.getDate() === 1) dateLabel = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-    else if (daysAgo % 14 === 0) dateLabel = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 
     return {
-      date: dateLabel,
+      idx,                          // numeric key — recharts hover maps to this exactly
+      daysAgo,
       fullDate: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+      // Show label only at month start, every 2 weeks, and today
+      showLabel: daysAgo === 0 || d.getDate() === 1 || daysAgo % 14 === 0,
+      shortLabel: daysAgo === 0 ? 'Today' : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
       contacts,
       avg7,
     }
@@ -271,8 +268,12 @@ export default function Dashboard({ clients, contactLogs }) {
           <LineChart data={activityData} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" />
             <XAxis
-              dataKey="date"
+              dataKey="idx"
               tick={{ fontSize: 10, fill: 'var(--text-muted)' }}
+              tickFormatter={(idx) => {
+                const d = activityData[idx]
+                return d?.showLabel ? d.shortLabel : ''
+              }}
               interval={0}
             />
             <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} allowDecimals={false} />

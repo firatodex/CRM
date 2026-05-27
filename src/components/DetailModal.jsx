@@ -14,7 +14,6 @@ function quickDate(daysFromNow) {
   return `${y}-${m}-${day}`
 }
 
-// Which tab is active in the right panel
 const RIGHT_TABS = ['Log', 'History', 'AI Intel']
 
 export default function DetailModal({ client, contactLogs, onSave, onDelete, onLogContact, onClose, saving }) {
@@ -29,17 +28,14 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
   const firstInputRef = useRef(null)
   const flashTimerRef = useRef(null)
 
-  // Clean up flash timer on unmount
   useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current) }, [])
 
   function showFlash() {
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
     setSavedFlash(true)
-    flashTimerRef.current = setTimeout(() => setSavedFlash(false), 1500)
+    flashTimerRef.current = setTimeout(() => setSavedFlash(false), 2000)
   }
 
-  // Dirty check: compare only editable fields as strings so numeric/string
-  // type mismatches from the DB don't cause false positives on open.
   const EDITABLE_FIELDS = [
     'name','stage','phone','email','company','business_type',
     'next_action','next_action_due','notes','temperature',
@@ -51,68 +47,66 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
     return a !== b
   }), [form, client])
 
+  const hasLog = logWhatHappened.trim().length > 0
+
   function set(key, val) { setForm(f => ({ ...f, [key]: val })) }
 
   const wa        = waLink(client.phone)
   const emailLink = client.email ? `mailto:${client.email}` : null
 
+  // Unified save: saves contact fields + log entry (if What happened has text)
   const handleSave = useCallback(async () => {
+    // 1. Save contact fields
     await onSave({ ...form })
-    showFlash()
-  }, [form, onSave])
 
-  // Keyboard shortcuts
+    // 2. If log has content, save it too
+    if (logWhatHappened.trim()) {
+      await onLogContact(client.id, logMethod, logWhatHappened.trim(), logWhatNext.trim() || null)
+      // Apply next action updates from log
+      const updates = {}
+      if (logWhatNext.trim()) updates.next_action = logWhatNext.trim()
+      if (logDue) updates.next_action_due = logDue
+      if (form.stage === 'lead') updates.stage = 'contacted'
+      if (Object.keys(updates).length > 0) {
+        const newForm = { ...form, ...updates }
+        setForm(newForm)
+        await onSave({ ...client, ...newForm })
+      }
+      setLogWhatHappened('')
+      setLogWhatNext('')
+      setLogDue('')
+      setRightTab('History')
+    }
+
+    showFlash()
+  }, [form, logWhatHappened, logWhatNext, logDue, logMethod, onSave, onLogContact, client])
+
   useEffect(() => {
     function handleKey(e) {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); handleSave() }
       if (e.key === 'Escape') {
-        if (isDirty) { if (window.confirm('You have unsaved changes. Close anyway?')) onClose() }
+        if (isDirty || hasLog) { if (window.confirm('You have unsaved changes. Close anyway?')) onClose() }
         else onClose()
       }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [handleSave, isDirty, onClose])
+  }, [handleSave, isDirty, hasLog, onClose])
 
   function handleBackdropClick(e) {
     if (e.target !== e.currentTarget) return
-    if (isDirty) { if (window.confirm('You have unsaved changes. Close anyway?')) onClose() }
+    if (isDirty || hasLog) { if (window.confirm('You have unsaved changes. Close anyway?')) onClose() }
     else onClose()
   }
 
-  async function handleLog() {
-    if (!logWhatHappened.trim()) return
-    await onLogContact(client.id, logMethod, logWhatHappened.trim(), logWhatNext.trim() || null)
-    const updates = {}
-    if (logWhatNext.trim()) updates.next_action     = logWhatNext.trim()
-    if (logDue)             updates.next_action_due = logDue
-    if (form.stage === 'lead') updates.stage = 'contacted'
-    if (Object.keys(updates).length > 0) {
-      const newForm = { ...form, ...updates }
-      setForm(newForm)
-      await onSave({ ...client, ...newForm })
-    }
-    setLogWhatHappened('')
-    setLogWhatNext('')
-    setLogDue('')
-    showFlash()
-    // Switch to History tab after logging so user sees the new entry
-    setRightTab('History')
-  }
-
-  // Called by SmartNoteDumper when user clicks "Apply to log form"
-  // Fills the log form fields from AI-parsed note and optionally
-  // updates the main form fields (stage, temperature, pain point).
   function handleAIApply({ whatHappened, whatNext, dueDate, stage, temperature, painPoint }) {
     setLogWhatHappened(whatHappened || '')
     setLogWhatNext(whatNext || '')
     setLogDue(dueDate || '')
     setShowSmartDump(false)
-    // Apply suggested field changes to the form (user still must Save)
     if (stage)       set('stage', stage)
     if (temperature) set('temperature', temperature)
     if (painPoint)   set('pain_point', painPoint)
-    // Switch to Log tab so they can review and save
     setRightTab('Log')
   }
 
@@ -136,11 +130,18 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
     )
   }
 
+  // Save button label changes based on what will happen
+  const saveLabel = saving
+    ? 'Saving...'
+    : hasLog
+      ? 'Save + Log'
+      : 'Save'
+
   return (
     <div className="overlay" onClick={handleBackdropClick}>
       <div className="modal modal-lg">
 
-        {/* ── Header ── */}
+        {/* Header */}
         <div className="detail-header">
           <div>
             <div className="modal-title" style={{ margin: 0 }}>{client.name}</div>
@@ -148,12 +149,15 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
           </div>
           <div className="detail-header-actions">
             {wa && (
-              <a href={wa} target="whatsapp" rel="noreferrer" className="btn btn-whatsapp btn-sm" onClick={e => { e.stopPropagation(); e.preventDefault(); window.open(wa, "whatsapp") }}>
+              <button
+                className="btn btn-whatsapp btn-sm"
+                onClick={e => { e.stopPropagation(); window.open(wa, 'whatsapp') }}
+              >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                 </svg>
                 WhatsApp
-              </a>
+              </button>
             )}
             {emailLink && (
               <a href={emailLink} className="btn btn-email btn-sm" onClick={e => e.stopPropagation()}>
@@ -167,16 +171,10 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
           </div>
         </div>
 
-        {isDirty && (
-          <div style={{ fontSize: 11, color: 'var(--warning)', textAlign: 'right', marginBottom: 4 }}>
-            Unsaved changes
-          </div>
-        )}
-
-        {/* ── Two-column grid ── */}
+        {/* Two-column grid */}
         <div className="detail-grid detail-grid-wide">
 
-          {/* ── Left: fields ── */}
+          {/* Left: fields */}
           <div className="detail-fields">
             <div className="field-row">
               <div className="field">
@@ -254,11 +252,11 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
             </div>
           </div>
 
-          {/* ── Right: tabbed panel ── */}
+          {/* Right: tabbed panel */}
           <div className="detail-history detail-history-wide">
 
             {/* Tab bar */}
-            <div style={{ display: 'flex', gap: 2, marginBottom: 12, background: 'var(--bg-light)', borderRadius: 8, padding: 3 }}>
+            <div style={{ display: 'flex', gap: 2, marginBottom: 12, background: 'var(--bg-light)', borderRadius: 8, padding: 3, flexShrink: 0 }}>
               {RIGHT_TABS.map(tab => (
                 <button
                   key={tab}
@@ -285,7 +283,7 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
               ))}
             </div>
 
-            {/* ── Tab: Log ── */}
+            {/* Tab: Log */}
             {rightTab === 'Log' && (
               <div>
                 {(form.next_action || form.next_action_due) && (
@@ -300,7 +298,6 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                   </div>
                 )}
 
-                {/* Toggle: smart dump vs manual entry */}
                 <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
                   <button
                     onClick={() => setShowSmartDump(false)}
@@ -326,7 +323,6 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                   </button>
                 </div>
 
-                {/* AI Smart Dumper */}
                 {showSmartDump && (
                   <SmartNoteDumper
                     client={client}
@@ -335,7 +331,6 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                   />
                 )}
 
-                {/* Manual log form */}
                 {!showSmartDump && (
                   <div className="log-form log-form-rich">
                     <div className="log-method-row">
@@ -357,7 +352,6 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                         onChange={e => setLogWhatHappened(e.target.value)}
                         placeholder="Describe the conversation, outcome, objections..."
                         rows={3}
-                        autoFocus
                       />
                     </div>
 
@@ -380,18 +374,15 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                       </div>
                     </div>
 
-                    <button
-                      className="btn btn-primary btn-sm"
-                      style={{ marginTop: 4, width: '100%' }}
-                      onClick={handleLog}
-                      disabled={!logWhatHappened.trim()}
-                    >
-                      Save Log
-                    </button>
+                    {/* No separate Save Log button — the footer Save handles everything */}
+                    {hasLog && (
+                      <div style={{ fontSize: 11, color: 'var(--primary)', marginTop: 6, fontWeight: 500 }}>
+                        ↓ Click Save to save fields + log this interaction
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* If AI parse filled the fields, show the pre-filled log form below the dumper */}
                 {showSmartDump && logWhatHappened && (
                   <div className="log-form log-form-rich" style={{ marginTop: 10 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', marginBottom: 8 }}>
@@ -419,15 +410,17 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                         <input type="date" value={logDue} onChange={e => setLogDue(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
                       </div>
                     </div>
-                    <button className="btn btn-primary btn-sm" style={{ marginTop: 4, width: '100%' }} onClick={handleLog} disabled={!logWhatHappened.trim()}>
-                      Save Log
-                    </button>
+                    {hasLog && (
+                      <div style={{ fontSize: 11, color: 'var(--primary)', marginTop: 6, fontWeight: 500 }}>
+                        ↓ Click Save to save fields + log this interaction
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             )}
 
-            {/* ── Tab: History ── */}
+            {/* Tab: History */}
             {rightTab === 'History' && (
               <div className="history-list">
                 {contactLogs.length === 0 ? (
@@ -438,30 +431,30 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
               </div>
             )}
 
-            {/* ── Tab: AI Intel ── */}
+            {/* Tab: AI Intel */}
             {rightTab === 'AI Intel' && (
               <LeadIntelligencePanel client={client} contactLogs={contactLogs} />
             )}
           </div>
         </div>
 
-        {/* ── Footer actions ── */}
+        {/* Footer — single Save button handles everything */}
         <div className="modal-actions">
           <button className="btn btn-danger btn-sm" onClick={() => onDelete(client.id)} disabled={saving}>
             Delete
           </button>
           <div className="spacer" />
-          <span style={{ fontSize: 12, color: 'var(--text2)', opacity: savedFlash ? 1 : 0, transition: 'opacity 0.3s' }}>
+          <span style={{ fontSize: 12, color: 'var(--success)', opacity: savedFlash ? 1 : 0, transition: 'opacity 0.3s' }}>
             ✓ Saved
           </span>
           <button className="btn btn-secondary" onClick={() => {
-            if (isDirty) { if (window.confirm('You have unsaved changes. Close anyway?')) onClose() }
+            if (isDirty || hasLog) { if (window.confirm('You have unsaved changes. Close anyway?')) onClose() }
             else onClose()
           }}>
             Cancel
           </button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : 'Save'} <span style={{ opacity: 0.6, fontSize: 11 }}>⌘S</span>
+            {saveLabel} <span style={{ opacity: 0.6, fontSize: 11 }}>⌘S</span>
           </button>
         </div>
       </div>

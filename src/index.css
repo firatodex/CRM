@@ -1532,3 +1532,62 @@ body {
   transition: all var(--transition);
 }
 .btn-email:hover { background: #D4E8FF; }
+
+/* ── Login screen ── */
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-light);
+  padding: 24px;
+}
+.login-card {
+  background: var(--bg-white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  padding: 32px;
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.login-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--primary);
+}
+.login-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 16px;
+}
+.login-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-light);
+  margin-top: 8px;
+}
+.login-input {
+  font-size: 14px;
+  font-family: var(--font);
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-white);
+  margin-top: 4px;
+}
+.login-input:focus { outline: none; border-color: var(--primary); }
+.login-error {
+  font-size: 12px;
+  color: var(--danger, #d33);
+  margin-top: 8px;
+}
+.login-btn {
+  margin-top: 16px;
+  width: 100%;
+  justify-content: center;
+}

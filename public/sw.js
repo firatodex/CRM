@@ -2,14 +2,18 @@
 // Minimal implementation: just makes the CRM installable,
 // no aggressive caching that could serve stale data.
 
-const CACHE = 'opscraft-v1'
+const CACHE = 'opscraft-v2'
 
 self.addEventListener('install', e => {
   self.skipWaiting()
 })
 
 self.addEventListener('activate', e => {
-  e.waitUntil(clients.claim())
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    ).then(() => clients.claim())
+  )
 })
 
 // Network-first strategy — always fetch fresh data from Supabase

@@ -1,16 +1,20 @@
 :root {
-  --primary: #0071E3;
-  --primary-hover: #0060C0;
-  --primary-light: #E8F2FF;
-  --text-dark: #1D1D1F;
+  /* ── OpsCraft signature palette ──
+     Shifted from generic iOS blue to a warm copper accent against
+     deep ink — distinct, still professional for B2B, references the
+     energy/solar domain without literal sun icons. */
+  --primary: #C2622D;
+  --primary-hover: #A8511F;
+  --primary-light: #FBEEE6;
+  --text-dark: #1A1A1E;
   --text-body: #424245;
   --text-light: #6E6E73;
   --text-muted: #AEAEB2;
   --bg-white: #FFFFFF;
-  --bg-light: #F5F5F7;
-  --bg-lighter: #FAFAFA;
-  --border: #D2D2D7;
-  --border-light: #E8E8ED;
+  --bg-light: #F6F4F1;
+  --bg-lighter: #FAFAF8;
+  --border: #D9D5CF;
+  --border-light: #ECE8E2;
   --success: #34C759;
   --success-bg: #E8F9EE;
   --warning: #FF9500;
@@ -22,9 +26,9 @@
   --radius: 10px;
   --radius-sm: 8px;
   --radius-xs: 6px;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04);
-  --shadow-lg: 0 12px 40px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06);
+  --shadow-sm: 0 1px 3px rgba(28,20,12,0.06), 0 1px 2px rgba(28,20,12,0.04);
+  --shadow-md: 0 4px 12px rgba(28,20,12,0.08), 0 1px 3px rgba(28,20,12,0.04);
+  --shadow-lg: 0 12px 40px rgba(28,20,12,0.12), 0 4px 12px rgba(28,20,12,0.06);
   --transition: 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
 
   /* ── Semantic aliases used by newer components ──
@@ -34,10 +38,10 @@
      - reminder cards, follow-up rows, and next-action summaries to
        have no background, no text color, no border accent
      - overdue badges in RemindersView to show no color             */
-  --accent:   #0071E3;   /* same as --primary */
+  --accent:   #C2622D;   /* same as --primary */
   --surface:  #FFFFFF;   /* card / panel background */
-  --surface2: #F5F5F7;   /* subtle hover / secondary surface */
-  --text1:    #1D1D1F;   /* primary text (same as --text-dark) */
+  --surface2: #F6F4F1;   /* subtle hover / secondary surface */
+  --text1:    #1A1A1E;   /* primary text (same as --text-dark) */
   --text2:    #6E6E73;   /* secondary text (same as --text-light) */
   --danger:   #FF3B30;   /* destructive / overdue (same as --error) */
 }
@@ -77,9 +81,9 @@ body {
 
 .topbar-logo {
   font-size: 17px;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--primary);
-  letter-spacing: -0.3px;
+  letter-spacing: -0.5px;
 }
 
 .topbar-nav {
@@ -113,7 +117,7 @@ body {
   background: var(--bg-white);
   color: var(--text-dark);
   font-weight: 600;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm), inset 0 -2px 0 var(--primary);
 }
 
 .nav-badge {
@@ -304,7 +308,7 @@ body {
 
 .card:hover {
   border-color: var(--primary);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
   transform: translateY(-1px);
 }
 
@@ -1539,31 +1543,42 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-light);
+  background: linear-gradient(160deg, var(--bg-light) 0%, #EFE7DD 100%);
   padding: 24px;
 }
 .login-card {
   background: var(--bg-white);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-sm);
-  padding: 32px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 36px 32px;
   width: 100%;
   max-width: 360px;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  border-top: 3px solid var(--primary);
 }
 .login-title {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 22px;
+  font-weight: 800;
   margin: 0;
-  color: var(--primary);
+  letter-spacing: -0.5px;
+  color: var(--text-dark);
+}
+.login-title::after {
+  content: '';
+  display: block;
+  width: 28px;
+  height: 3px;
+  background: var(--primary);
+  border-radius: 2px;
+  margin-top: 10px;
 }
 .login-subtitle {
   font-size: 13px;
   color: var(--text-muted);
-  margin: 0 0 16px;
+  margin: 12px 0 8px;
 }
 .login-label {
   font-size: 12px;
@@ -1574,13 +1589,18 @@ body {
 .login-input {
   font-size: 14px;
   font-family: var(--font);
-  padding: 8px 10px;
+  padding: 9px 11px;
   border: 1px solid var(--border);
   border-radius: var(--radius-xs);
-  background: var(--bg-white);
+  background: var(--bg-lighter);
   margin-top: 4px;
+  transition: border-color var(--transition), background var(--transition);
 }
-.login-input:focus { outline: none; border-color: var(--primary); }
+.login-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: var(--bg-white);
+}
 .login-error {
   font-size: 12px;
   color: var(--danger, #d33);

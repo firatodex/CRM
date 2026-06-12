@@ -29,8 +29,10 @@ export default function App() {
   const [confirmDelete, setConfirmDelete] = useState(null)
 
   useEffect(() => {
-    fetchClients()
-    fetchContactLogs()
+    let cancelled = false
+    fetchClients(() => cancelled)
+    fetchContactLogs(() => cancelled)
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
@@ -52,17 +54,19 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKey)
   }, [selected])
 
-  async function fetchClients() {
+  async function fetchClients(isCancelled = () => false) {
     setLoading(true)
     setError(null)
     let allClients = []
     let from = 0
     const batchSize = 1000
     while (true) {
+      if (isCancelled()) return
       const { data, error } = await supabase
         .from('clients').select('*')
         .order('created_at', { ascending: false })
         .range(from, from + batchSize - 1)
+      if (isCancelled()) return
       if (error) { setError(error.message); break }
       if (!data || data.length === 0) break
       allClients = [...allClients, ...data]
@@ -75,15 +79,17 @@ export default function App() {
 
   // Paginated contact log fetch — fetches all logs in 500-row batches
   // so the dashboard activity chart and history panel don't silently truncate.
-  async function fetchContactLogs() {
+  async function fetchContactLogs(isCancelled = () => false) {
     let allLogs = []
     let from = 0
     const batchSize = 500
     while (true) {
+      if (isCancelled()) return
       const { data, error } = await supabase
         .from('contact_log').select('*')
         .order('contacted_at', { ascending: false })
         .range(from, from + batchSize - 1)
+      if (isCancelled()) return
       if (error) break
       if (!data || data.length === 0) break
       allLogs = [...allLogs, ...data]
@@ -179,28 +185,45 @@ export default function App() {
       .select().single()
 
     if (e1) {
-      // New columns don't exist yet — insert with legacy schema only
-      const { data: d2 } = await supabase
+      // New columns may not exist yet — retry with legacy schema only.
+      // Only treat this as the "missing column" case if the error says so;
+      // otherwise surface the real error to the user.
+      const isMissingColumn = e1.message?.includes('column') || e1.code === '42703' || e1.code === 'PGRST204'
+      if (!isMissingColumn) {
+        setError(`Failed to save log: ${e1.message}`)
+        return
+      }
+      const { data: d2, error: e2 } = await supabase
         .from('contact_log')
         .insert({ client_id: clientId, method, note, contacted_at: now })
         .select().single()
+      if (e2) {
+        setError(`Failed to save log: ${e2.message}`)
+        return
+      }
       logData = d2
     } else {
       logData = d1
     }
 
     if (logData) setContactLogs(prev => [logData, ...prev])
-    const { data: clientData } = await supabase
+    const { data: clientData, error: e3 } = await supabase
       .from('clients').update({ last_contacted_at: now }).eq('id', clientId).select().single()
-    if (clientData) setClients(prev => prev.map(c => c.id === clientData.id ? clientData : c))
+    if (e3) setError(`Log saved, but failed to update client's last-contacted time: ${e3.message}`)
+    else if (clientData) setClients(prev => prev.map(c => c.id === clientData.id ? clientData : c))
   }
+
+  const [dropping, setDropping] = useState(false)
 
   const handleDrop = useCallback(async (stageKey) => {
     if (!draggedClient || draggedClient.stage === stageKey) { setDraggedClient(null); return }
+    setDropping(true)
     const { data, error } = await supabase
       .from('clients').update({ stage: stageKey }).eq('id', draggedClient.id).select().single()
     if (!error && data) setClients(prev => prev.map(c => c.id === data.id ? data : c))
+    else if (error) setError(`Failed to move card: ${error.message}`)
     setDraggedClient(null)
+    setDropping(false)
   }, [draggedClient])
 
   const pipelineClients = clients.filter(c => !['active', 'dead'].includes(c.stage))
@@ -300,7 +323,7 @@ export default function App() {
                 onCardClick={setSelected}
                 onDragStart={setDraggedClient}
                 onDrop={handleDrop}
-                isDragTarget={!!draggedClient && draggedClient.stage !== stage.key}
+                isDragTarget={!dropping && !!draggedClient && draggedClient.stage !== stage.key}
               />
             ))}
           </div>

@@ -21,10 +21,10 @@ export default function AddClientModal({ onSave, onClose, saving }) {
     if (key === 'name') setNameError(false)
   }
 
-  // Submit on Enter (unless inside a textarea), close on Escape
+  // Submit on Enter (only from text/number/date inputs, not selects or textarea), close on Escape
   useEffect(() => {
     function handleKey(e) {
-      if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+      if (e.key === 'Enter' && (e.target.tagName === 'INPUT')) {
         e.preventDefault()
         handleSave()
       }

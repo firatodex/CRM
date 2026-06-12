@@ -76,9 +76,10 @@ export function exportCSV(clients) {
   const rows = clients.map(c => [
     c.name, c.company, c.phone, c.email, c.stage, c.temperature, c.source,
     c.potential_revenue, c.pain_point, c.website, c.last_contacted_at, c.notes
-  ].map(v => `"${(v || '').toString().replace(/"/g, '""')}"`))
-  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
-  const blob = new Blob([csv], { type: 'text/csv' })
+  ].map(v => `"${(v ?? '').toString().replace(/"/g, '""')}"`))
+  // CRLF row endings so Excel renders embedded newlines within quoted fields correctly
+  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

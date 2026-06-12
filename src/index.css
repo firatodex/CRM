@@ -763,7 +763,16 @@ body {
 
 .log-note:focus { outline: none; border-color: var(--primary); }
 
-.history-list { display: flex; flex-direction: column; gap: 6px; }
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: scroll;
+  max-height: calc(90vh - 280px);
+  padding-right: 14px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-light) transparent;
+}
 
 .empty-history {
   font-size: 13px;

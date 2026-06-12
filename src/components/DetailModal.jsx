@@ -367,8 +367,8 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                     <div className="field">
                       <label style={{ fontSize: 12, color: 'var(--text2)' }}>Due date</label>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button className={`quick-date-btn ${logDue === quickDate(0) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(0))}>Today</button>
                         <button className={`quick-date-btn ${logDue === quickDate(1) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(1))}>Tomorrow</button>
-                        <button className={`quick-date-btn ${logDue === quickDate(3) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(3))}>+3 days</button>
                         <button className={`quick-date-btn ${logDue === quickDate(7) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(7))}>+7 days</button>
                         <input type="date" value={logDue} onChange={e => setLogDue(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
                       </div>
@@ -404,8 +404,8 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                     <div className="field">
                       <label style={{ fontSize: 12, color: 'var(--text2)' }}>Due date</label>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button className={`quick-date-btn ${logDue === quickDate(0) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(0))}>Today</button>
                         <button className={`quick-date-btn ${logDue === quickDate(1) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(1))}>Tomorrow</button>
-                        <button className={`quick-date-btn ${logDue === quickDate(3) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(3))}>+3 days</button>
                         <button className={`quick-date-btn ${logDue === quickDate(7) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(7))}>+7 days</button>
                         <input type="date" value={logDue} onChange={e => setLogDue(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
                       </div>

@@ -46,7 +46,7 @@ function ActivityTooltip({ active, payload }) {
       <div style={{ color: d.contacts > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>
         {d.contacts} contact{d.contacts !== 1 ? 's' : ''}
       </div>
-      <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>7d avg: {d.avg7}</div>
+      <div style={{ color: '#5E8FC0', marginTop: 2 }}>7d avg: {d.avg7}</div>
     </div>
   )
 }
@@ -86,7 +86,9 @@ export default function Dashboard({ clients, contactLogs }) {
     : null
 
   const overdue  = pipeline.filter(c => c.next_action_due && c.next_action_due < today)
-  const noAction = pipeline.filter(c => !c.next_action)
+  const dueToday = pipeline.filter(c => c.next_action_due === today)
+  // Only flag "no next action" for leads already in conversation — not fresh unworked leads
+  const noAction = pipeline.filter(c => !c.next_action && ['contacted', 'proposal'].includes(c.stage))
   const stale    = pipeline.filter(c => {
     if (!c.last_contacted_at) return true
     return new Date(c.last_contacted_at) < new Date(Date.now() - 7 * 86400000)
@@ -182,15 +184,51 @@ export default function Dashboard({ clients, contactLogs }) {
     return { label, rate }
   })
 
+  const TEMP_SCORE  = { hot: 3, warm: 2, cold: 1 }
+  const STAGE_SCORE = { proposal: 3, contacted: 2, lead: 1 }
   const topOpportunities = pipeline
     .filter(c => c.potential_revenue)
-    .sort((a, b) => Number(b.potential_revenue) - Number(a.potential_revenue))
+    .map(c => {
+      const daysSinceContact = c.last_contacted_at
+        ? Math.floor((Date.now() - new Date(c.last_contacted_at)) / 86400000)
+        : 999
+      const recencyScore = Math.max(0, 10 - daysSinceContact)
+      const score = (TEMP_SCORE[c.temperature] || 0) * 4
+                  + (STAGE_SCORE[c.stage] || 0) * 3
+                  + recencyScore
+      return { ...c, _score: score }
+    })
+    .sort((a, b) => b._score - a._score || Number(b.potential_revenue) - Number(a.potential_revenue))
     .slice(0, 5)
 
   return (
     <div className="dashboard" style={{ maxWidth: '100%' }}>
 
-      {/* Row 1: Hero KPIs */}
+      {/* Today context — one line, always visible */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 16,
+        padding: '8px 14px', marginBottom: 12,
+        background: 'var(--bg-white)', border: '1px solid var(--border-light)',
+        borderRadius: 'var(--radius-sm)', fontSize: 13,
+      }}>
+        <span style={{ fontWeight: 700, color: 'var(--text-dark)' }}>Today</span>
+        {dueToday.length > 0
+          ? <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{dueToday.length} due today</span>
+          : <span style={{ color: 'var(--text-muted)' }}>Nothing scheduled for today</span>
+        }
+        {overdue.length > 0 && (
+          <span style={{ color: 'var(--error)', fontWeight: 600 }}>· {overdue.length} overdue</span>
+        )}
+        <span style={{ color: 'var(--border)', userSelect: 'none' }}>|</span>
+        <span style={{ color: 'var(--text-muted)' }}>
+          {thisWeekLogs.length} contacts this week
+          {weekTrend !== 0 && (
+            <span style={{ marginLeft: 6, color: weekTrend > 0 ? 'var(--success)' : 'var(--error)', fontWeight: 600 }}>
+              {weekTrend > 0 ? `↑ ${weekTrend}` : `↓ ${Math.abs(weekTrend)}`} vs last week
+            </span>
+          )}
+        </span>
+      </div>
       <div className="dash-hero" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
         <StatCard
           label="Pipeline value"
@@ -259,7 +297,7 @@ export default function Dashboard({ clients, contactLogs }) {
             Daily contacts
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)' }}>
-            <div style={{ width: 16, height: 2, background: 'var(--warning)', borderRadius: 1, opacity: 0.7 }} />
+            <div style={{ width: 16, height: 2, background: '#5E8FC0', borderRadius: 1 }} />
             7-day average
           </div>
         </div>
@@ -292,7 +330,7 @@ export default function Dashboard({ clients, contactLogs }) {
             <Line
               type="monotone"
               dataKey="avg7"
-              stroke="var(--warning)"
+              stroke="#5E8FC0"
               strokeWidth={2}
               dot={false}
               activeDot={false}
@@ -383,7 +421,7 @@ export default function Dashboard({ clients, contactLogs }) {
               </span>
               <div>
                 <div className="alert-text">No next action set</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Leads without a clear next step</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Contacted/proposal leads without a clear next step</div>
               </div>
             </div>
             {avgVelocity !== null && (
@@ -410,7 +448,7 @@ export default function Dashboard({ clients, contactLogs }) {
         </div>
 
         <div className="dash-card flex-1">
-          <div className="dash-card-title">Top opportunities</div>
+          <div className="dash-card-title">Top opportunities <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>by temperature · stage · recency</span></div>
           {topOpportunities.length === 0 ? (
             <div style={{ fontSize: 13, color: 'var(--text-muted)', paddingTop: 20, textAlign: 'center' }}>
               Add potential revenue to leads to see opportunities

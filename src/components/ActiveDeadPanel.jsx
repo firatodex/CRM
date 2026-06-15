@@ -1,7 +1,50 @@
-import { formatRelativeTime, formatCurrency, waLink } from '../utils'
+import { useState, useMemo } from 'react'
+import { formatRelativeTime, formatCurrency, waLink, todayStr } from '../utils'
+
+const SORT_OPTIONS = [
+  { key: 'last_contacted', label: 'Last contacted' },
+  { key: 'revenue',        label: 'Revenue' },
+  { key: 'name',           label: 'Name' },
+  { key: 'created',        label: 'Date added' },
+]
 
 export default function ActiveDeadPanel({ clients, type, onCardClick }) {
   const isActive = type === 'active'
+  const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState('last_contacted')
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim()
+    let list = q
+      ? clients.filter(c =>
+          (c.name || '').toLowerCase().includes(q) ||
+          (c.company || '').toLowerCase().includes(q) ||
+          (c.phone || '').includes(q) ||
+          (c.business_type || '').toLowerCase().includes(q) ||
+          (c.notes || '').toLowerCase().includes(q) ||
+          (c.pain_point || '').toLowerCase().includes(q)
+        )
+      : [...clients]
+
+    list.sort((a, b) => {
+      if (sortBy === 'last_contacted') {
+        if (!a.last_contacted_at) return 1
+        if (!b.last_contacted_at) return -1
+        return new Date(b.last_contacted_at) - new Date(a.last_contacted_at)
+      }
+      if (sortBy === 'revenue') {
+        return (Number(b.potential_revenue) || 0) - (Number(a.potential_revenue) || 0)
+      }
+      if (sortBy === 'name') {
+        return (a.name || '').localeCompare(b.name || '')
+      }
+      if (sortBy === 'created') {
+        return new Date(b.created_at) - new Date(a.created_at)
+      }
+      return 0
+    })
+    return list
+  }, [clients, search, sortBy])
 
   return (
     <div className="list-panel">
@@ -9,13 +52,36 @@ export default function ActiveDeadPanel({ clients, type, onCardClick }) {
         <h2 className="list-panel-title">
           {isActive ? 'Active Clients' : 'Archived Leads'}
         </h2>
-        <span className="list-panel-count">{clients.length}</span>
+        <span className="list-panel-count">{filtered.length}{filtered.length !== clients.length ? ` of ${clients.length}` : ''}</span>
+      </div>
+
+      {/* Search + Sort bar */}
+      <div className="list-controls">
+        <div className="filter-search-wrap" style={{ flex: 1 }}>
+          <svg className="filter-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <input
+            className="filter-search"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search name, company, city, notes…"
+          />
+          {search && (
+            <button className="filter-clear-x" onClick={() => setSearch('')}>×</button>
+          )}
+        </div>
+        <select className="filter-select" value={sortBy} onChange={e => setSortBy(e.target.value)}>
+          {SORT_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+        </select>
       </div>
 
       {clients.length === 0 ? (
         <div className="list-empty">
           {isActive ? 'No active clients yet. Move leads here when they convert.' : 'No archived leads.'}
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="list-empty">No results for "{search}"</div>
       ) : (
         <div className="list-table">
           <div className="list-row list-header-row">
@@ -25,7 +91,7 @@ export default function ActiveDeadPanel({ clients, type, onCardClick }) {
             <span className="list-cell cell-contact">Last contact</span>
             <span className="list-cell cell-actions"></span>
           </div>
-          {clients.map(c => {
+          {filtered.map(c => {
             const wa = waLink(c.phone)
             return (
               <div key={c.id} className="list-row" onClick={() => onCardClick(c)}>

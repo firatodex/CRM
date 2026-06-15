@@ -10,11 +10,13 @@ import SearchBar from './components/SearchBar'
 import ActiveDeadPanel from './components/ActiveDeadPanel'
 import ExportModal from './components/ExportModal'
 import ConfirmModal from './components/ConfirmModal'
+import FilterBar, { applyFilters } from './components/FilterBar'
 import { formatCurrency, todayStr } from './utils'
 
 export default function App() {
   const [clients, setClients] = useState([])
   const [contactLogs, setContactLogs] = useState([])
+  const [filters, setFilters] = useState({ search: '', temperature: '', source: '', overdueOnly: false })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -314,18 +316,28 @@ export default function App() {
         {loading ? (
           <div className="loading"><div className="loading-spinner" />Loading...</div>
         ) : view === 'pipeline' ? (
-          <div className="board" style={{ flex: 1 }}>
-            {PIPELINE_STAGES.map(stage => (
-              <KanbanColumn
-                key={stage.key}
-                stage={stage}
-                clients={clients.filter(c => c.stage === stage.key)}
-                onCardClick={setSelected}
-                onDragStart={setDraggedClient}
-                onDrop={handleDrop}
-                isDragTarget={!dropping && !!draggedClient && draggedClient.stage !== stage.key}
-              />
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            <FilterBar clients={clients} filters={filters} onChange={setFilters} />
+            <div className="board" style={{ flex: 1 }}>
+              {PIPELINE_STAGES.map(stage => {
+                const stageClients = applyFilters(
+                  clients.filter(c => c.stage === stage.key),
+                  filters,
+                  todayStr()
+                )
+                return (
+                  <KanbanColumn
+                    key={stage.key}
+                    stage={stage}
+                    clients={stageClients}
+                    onCardClick={setSelected}
+                    onDragStart={setDraggedClient}
+                    onDrop={handleDrop}
+                    isDragTarget={!dropping && !!draggedClient && draggedClient.stage !== stage.key}
+                  />
+                )
+              })}
+            </div>
           </div>
         ) : view === 'today' ? (
           <TodayView

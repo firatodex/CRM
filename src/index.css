@@ -1611,3 +1611,140 @@ body {
   width: 100%;
   justify-content: center;
 }
+
+/* ── FilterBar ── */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0 12px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.filter-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 200px;
+  max-width: 300px;
+}
+
+.filter-search-icon {
+  position: absolute;
+  left: 9px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.filter-search {
+  font-family: var(--font);
+  font-size: 13px;
+  width: 100%;
+  padding: 6px 28px 6px 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-white);
+  color: var(--text-dark);
+  transition: border-color var(--transition);
+}
+.filter-search:focus { outline: none; border-color: var(--primary); }
+.filter-search::placeholder { color: var(--text-muted); }
+
+.filter-clear-x {
+  position: absolute;
+  right: 7px;
+  background: none;
+  border: none;
+  font-size: 15px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.filter-clear-x:hover { color: var(--text-dark); }
+
+.filter-pills {
+  display: flex;
+  gap: 4px;
+}
+
+.filter-pill {
+  font-family: var(--font);
+  font-size: 14px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-white);
+  cursor: pointer;
+  transition: all var(--transition);
+  line-height: 1;
+}
+.filter-pill:hover { border-color: var(--primary); }
+.filter-pill.active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.filter-pill-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-light);
+  padding: 5px 10px;
+}
+.filter-pill-text.active {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.filter-select {
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-white);
+  color: var(--text-body);
+  cursor: pointer;
+}
+.filter-select:focus { outline: none; border-color: var(--primary); }
+
+.filter-clear {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius-xs);
+}
+.filter-clear:hover { background: var(--primary-light); }
+
+/* ── Card overdue indicator ── */
+.card.card-overdue {
+  border-left: 3px solid var(--error);
+}
+
+/* ── Card action clamped to 1 line ── */
+.card-action-clamped {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── List panel controls (sort + search) ── */
+.list-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  align-items: center;
+}
+
+/* ── Toast fade out ── */
+@keyframes fadeOut {
+  0%   { opacity: 1; }
+  60%  { opacity: 1; }
+  100% { opacity: 0; }
+}

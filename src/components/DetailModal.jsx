@@ -16,19 +16,45 @@ function quickDate(daysFromNow) {
 
 const RIGHT_TABS = ['Log', 'History', 'AI Intel']
 
+function getLastMethod() {
+  try { return localStorage.getItem('lastLogMethod') || 'Phone call' } catch { return 'Phone call' }
+}
+
 export default function DetailModal({ client, contactLogs, onSave, onDelete, onLogContact, onClose, saving }) {
   const [form, setForm] = useState({ ...client })
-  const [logMethod, setLogMethod] = useState('Phone call')
+  const [logMethod, setLogMethod] = useState(getLastMethod)
   const [logWhatHappened, setLogWhatHappened] = useState('')
   const [logWhatNext, setLogWhatNext]         = useState('')
   const [logDue, setLogDue]                   = useState('')
   const [showSmartDump, setShowSmartDump]     = useState(false)
   const [rightTab, setRightTab]               = useState('Log')
   const [savedFlash, setSavedFlash]           = useState(false)
+  const [logSavedFlash, setLogSavedFlash]     = useState(false)
   const firstInputRef = useRef(null)
   const flashTimerRef = useRef(null)
+  const logFlashTimerRef = useRef(null)
 
-  useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current) }, [])
+  useEffect(() => () => {
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
+    if (logFlashTimerRef.current) clearTimeout(logFlashTimerRef.current)
+  }, [])
+
+  function showFlash() {
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
+    setSavedFlash(true)
+    flashTimerRef.current = setTimeout(() => setSavedFlash(false), 2000)
+  }
+
+  function showLogFlash() {
+    if (logFlashTimerRef.current) clearTimeout(logFlashTimerRef.current)
+    setLogSavedFlash(true)
+    logFlashTimerRef.current = setTimeout(() => setLogSavedFlash(false), 1000)
+  }
+
+  function handleSetLogMethod(m) {
+    setLogMethod(m)
+    try { localStorage.setItem('lastLogMethod', m) } catch {}
+  }
 
   function showFlash() {
     if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
@@ -76,6 +102,7 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
       setLogWhatNext('')
       setLogDue('')
       setRightTab('History')
+      showLogFlash()
     }
 
     showFlash()
@@ -241,6 +268,7 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
               </div>
             </div>
 
+            <div className="section-label">Strategy</div>
             <div className="field">
               <label>Pain point</label>
               <input value={form.pain_point || ''} onChange={e => set('pain_point', e.target.value)} placeholder="What problem are they trying to solve?" />
@@ -248,12 +276,25 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
 
             <div className="section-label">Notes</div>
             <div className="field">
-              <textarea value={form.notes || ''} onChange={e => set('notes', e.target.value)} placeholder="Context, observations, anything relevant..." rows={4} />
+              <textarea value={form.notes || ''} onChange={e => set('notes', e.target.value)} placeholder="Context, observations, address, city, anything relevant..." rows={4} />
             </div>
           </div>
 
           {/* Right: tabbed panel */}
-          <div className="detail-history detail-history-wide">
+          <div className="detail-history detail-history-wide" style={{ position: 'relative' }}>
+
+            {/* Log saved flash */}
+            {logSavedFlash && (
+              <div style={{
+                position: 'absolute', top: 8, left: 0, right: 0,
+                background: 'var(--success)', color: '#fff',
+                fontSize: 12, fontWeight: 600, textAlign: 'center',
+                padding: '6px', borderRadius: 6, zIndex: 10,
+                animation: 'fadeOut 1s forwards',
+              }}>
+                ✓ Logged
+              </div>
+            )}
 
             {/* Tab bar */}
             <div style={{ display: 'flex', gap: 2, marginBottom: 12, background: 'var(--bg-light)', borderRadius: 8, padding: 3, flexShrink: 0 }}>
@@ -338,7 +379,7 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                         <button
                           key={m}
                           className={`log-method-btn ${logMethod === m ? 'active' : ''}`}
-                          onClick={() => setLogMethod(m)}
+                          onClick={() => handleSetLogMethod(m)}
                         >
                           {m}
                         </button>
@@ -362,6 +403,9 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                         onChange={e => setLogWhatNext(e.target.value)}
                         placeholder="Specific next step..."
                       />
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
+                        Updates the card's next action when saved
+                      </div>
                     </div>
 
                     <div className="field">

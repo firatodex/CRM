@@ -1,4 +1,4 @@
-import { formatDue, formatRelativeTime, formatCurrency, waLink } from '../utils'
+import { formatDue, formatRelativeTime, formatCurrency, waLink, todayStr } from '../utils'
 import { TEMPERATURES } from '../stages'
 
 export default function ClientCard({ client, onClick, onDragStart }) {
@@ -6,10 +6,11 @@ export default function ClientCard({ client, onClick, onDragStart }) {
   const wa = waLink(client.phone)
   const temp = TEMPERATURES.find(t => t.key === client.temperature)
   const lastContact = formatRelativeTime(client.last_contacted_at)
+  const isOverdue = client.next_action_due && client.next_action_due < todayStr()
 
   return (
     <div
-      className="card"
+      className={`card ${isOverdue ? 'card-overdue' : ''}`}
       onClick={() => onClick(client)}
       draggable
       onDragStart={(e) => {
@@ -49,7 +50,7 @@ export default function ClientCard({ client, onClick, onDragStart }) {
       )}
 
       {client.next_action && (
-        <div className="card-action">{client.next_action}</div>
+        <div className="card-action card-action-clamped">{client.next_action}</div>
       )}
 
       <div className="card-footer">

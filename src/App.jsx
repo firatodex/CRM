@@ -128,6 +128,7 @@ export default function App() {
       company: form.company?.trim() || null, business_type: form.business_type?.trim() || null,
       next_action: form.next_action?.trim() || null,
       next_action_due: form.next_action_due || null,
+      next_action_time: form.next_action_time || null,
       notes: form.notes?.trim() || null, temperature: form.temperature || null,
       potential_revenue: form.potential_revenue || null, source: form.source || null,
       website: form.website?.trim() || null, pain_point: form.pain_point?.trim() || null,

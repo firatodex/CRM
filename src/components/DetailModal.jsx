@@ -26,6 +26,7 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
   const [logWhatHappened, setLogWhatHappened] = useState('')
   const [logWhatNext, setLogWhatNext]         = useState('')
   const [logDue, setLogDue]                   = useState('')
+  const [logTime, setLogTime]                  = useState('')
   const [showSmartDump, setShowSmartDump]     = useState(false)
   const [rightTab, setRightTab]               = useState('Log')
   const [savedFlash, setSavedFlash]           = useState(false)
@@ -64,7 +65,7 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
 
   const EDITABLE_FIELDS = [
     'name','stage','phone','email','company','business_type',
-    'next_action','next_action_due','notes','temperature',
+    'next_action','next_action_due','next_action_time','notes','temperature',
     'potential_revenue','source','website','pain_point'
   ]
   const isDirty = useMemo(() => EDITABLE_FIELDS.some(k => {
@@ -92,6 +93,8 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
       const updates = {}
       if (logWhatNext.trim()) updates.next_action = logWhatNext.trim()
       if (logDue) updates.next_action_due = logDue
+      if (logDue && logTime) updates.next_action_time = logTime
+      else if (logDue && !logTime) updates.next_action_time = null
       if (form.stage === 'lead') updates.stage = 'contacted'
       if (Object.keys(updates).length > 0) {
         const newForm = { ...form, ...updates }
@@ -101,12 +104,13 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
       setLogWhatHappened('')
       setLogWhatNext('')
       setLogDue('')
+      setLogTime('')
       setRightTab('History')
       showLogFlash()
     }
 
     showFlash()
-  }, [form, logWhatHappened, logWhatNext, logDue, logMethod, onSave, onLogContact, client])
+  }, [form, logWhatHappened, logWhatNext, logDue, logTime, logMethod, onSave, onLogContact, client])
 
   useEffect(() => {
     function handleKey(e) {
@@ -334,6 +338,7 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                     {form.next_action_due && (
                       <div style={{ fontSize: 12, color: form.next_action_due < todayStr() ? 'var(--danger)' : 'var(--text2)', marginTop: 2 }}>
                         Due: {new Date(form.next_action_due + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {form.next_action_time && <span style={{ marginLeft: 6, fontWeight: 600 }}>@ {form.next_action_time}</span>}
                       </div>
                     )}
                   </div>
@@ -416,6 +421,18 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                         <button className={`quick-date-btn ${logDue === quickDate(7) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(7))}>+7 days</button>
                         <input type="date" value={logDue} onChange={e => setLogDue(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
                       </div>
+                      {logDue && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                          <input
+                            type="time"
+                            value={logTime}
+                            onChange={e => setLogTime(e.target.value)}
+                            style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius-xs)', fontFamily: 'var(--font)' }}
+                          />
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Optional — leave blank for anytime</span>
+                          {logTime && <button onClick={() => setLogTime('')} style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>✕ Clear time</button>}
+                        </div>
+                      )}
                     </div>
 
                     {/* No separate Save Log button — the footer Save handles everything */}
@@ -453,6 +470,18 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                         <button className={`quick-date-btn ${logDue === quickDate(7) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(7))}>+7 days</button>
                         <input type="date" value={logDue} onChange={e => setLogDue(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
                       </div>
+                      {logDue && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                          <input
+                            type="time"
+                            value={logTime}
+                            onChange={e => setLogTime(e.target.value)}
+                            style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius-xs)', fontFamily: 'var(--font)' }}
+                          />
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Optional — leave blank for anytime</span>
+                          {logTime && <button onClick={() => setLogTime('')} style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>✕ Clear time</button>}
+                        </div>
+                      )}
                     </div>
                     {hasLog && (
                       <div style={{ fontSize: 11, color: 'var(--primary)', marginTop: 6, fontWeight: 500 }}>

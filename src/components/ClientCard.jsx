@@ -54,7 +54,12 @@ export default function ClientCard({ client, onClick, onDragStart }) {
       )}
 
       <div className="card-footer">
-        {due && <span className={`card-due ${due.cls}`}>{due.label}</span>}
+        {due && (
+          <span className={`card-due ${due.cls}`}>
+            {due.label}
+            {client.next_action_time && <span style={{ marginLeft: 4, opacity: 0.8 }}>@ {client.next_action_time}</span>}
+          </span>
+        )}
         {lastContact && <span className="card-last-contact">Last: {lastContact}</span>}
       </div>
     </div>

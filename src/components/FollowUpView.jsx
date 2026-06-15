@@ -56,7 +56,7 @@ export default function FollowUpView({ clients, onCardClick, onLogContact }) {
           )}
         </div>
         <div className={`reminder-row-due ${due?.cls || ''}`} style={{ fontSize: 12, flexShrink: 0 }}>
-          {due?.label}
+          {due?.label}{client.next_action_time && <span style={{ marginLeft: 4, opacity: 0.8 }}>@ {client.next_action_time}</span>}
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
           {wa && (

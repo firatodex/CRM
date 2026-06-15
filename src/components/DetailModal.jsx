@@ -330,7 +330,7 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
 
             {/* Tab: Log */}
             {rightTab === 'Log' && (
-              <div>
+              <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, paddingRight: 2 }}>
                 {(form.next_action || form.next_action_due) && (
                   <div className="next-action-summary" style={{ marginBottom: 10 }}>
                     <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 3, fontWeight: 500 }}>NEXT ACTION</div>
@@ -420,18 +420,19 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                         <button className={`quick-date-btn ${logDue === quickDate(1) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(1))}>Tomorrow</button>
                         <button className={`quick-date-btn ${logDue === quickDate(7) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(7))}>+7 days</button>
                         <input type="date" value={logDue} onChange={e => setLogDue(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
-                      </div>
-                      {logDue && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                        {logDue && (
                           <input
                             type="time"
                             value={logTime}
                             onChange={e => setLogTime(e.target.value)}
-                            style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius-xs)', fontFamily: 'var(--font)' }}
+                            title="Optional call time — leave blank for anytime"
+                            style={{ fontSize: 12, padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius-xs)', fontFamily: 'var(--font)', minWidth: 100 }}
                           />
-                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Optional — leave blank for anytime</span>
-                          {logTime && <button onClick={() => setLogTime('')} style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>✕ Clear time</button>}
-                        </div>
+                        )}
+                        {logTime && <button onClick={() => setLogTime('')} title="Clear time" style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>✕</button>}
+                      </div>
+                      {logDue && !logTime && (
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>Time is optional — leave blank for anytime</div>
                       )}
                     </div>
 
@@ -469,18 +470,19 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                         <button className={`quick-date-btn ${logDue === quickDate(1) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(1))}>Tomorrow</button>
                         <button className={`quick-date-btn ${logDue === quickDate(7) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(7))}>+7 days</button>
                         <input type="date" value={logDue} onChange={e => setLogDue(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
-                      </div>
-                      {logDue && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                        {logDue && (
                           <input
                             type="time"
                             value={logTime}
                             onChange={e => setLogTime(e.target.value)}
-                            style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius-xs)', fontFamily: 'var(--font)' }}
+                            title="Optional call time — leave blank for anytime"
+                            style={{ fontSize: 12, padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius-xs)', fontFamily: 'var(--font)', minWidth: 100 }}
                           />
-                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Optional — leave blank for anytime</span>
-                          {logTime && <button onClick={() => setLogTime('')} style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>✕ Clear time</button>}
-                        </div>
+                        )}
+                        {logTime && <button onClick={() => setLogTime('')} title="Clear time" style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>✕</button>}
+                      </div>
+                      {logDue && !logTime && (
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>Time is optional — leave blank for anytime</div>
                       )}
                     </div>
                     {hasLog && (

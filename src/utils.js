@@ -71,6 +71,23 @@ export function waLink(phone) {
   return `https://web.whatsapp.com/send?phone=${normalized}&text=`
 }
 
+// Display-only formatter: groups a 10-digit Indian mobile number as "XXXXX XXXXX"
+// for visual scanning and easy dialing. Strips a leading +91/91/0 country/trunk
+// prefix if present. Does NOT mutate stored data — purely cosmetic on render.
+// Numbers that aren't a clean 10-digit Indian mobile (e.g. international numbers,
+// landlines with extensions) are returned unchanged so nothing is misrepresented.
+export function formatPhoneDisplay(phone) {
+  if (!phone) return phone
+  const digits = phone.replace(/\D/g, '')
+  let core = digits
+  if (core.length === 12 && core.startsWith('91')) core = core.slice(2)
+  else if (core.length === 11 && core.startsWith('0')) core = core.slice(1)
+  if (core.length === 10) {
+    return `${core.slice(0, 5)} ${core.slice(5)}`
+  }
+  return phone
+}
+
 export function exportCSV(clients) {
   const headers = ['Name','Company','Phone','Email','Stage','Temperature','Source','Potential Revenue','Pain Point','Website','Last Contacted','Notes']
   const rows = clients.map(c => [

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { ALL_STAGES, TEMPERATURES, SOURCES } from '../stages'
-import { waLink, formatDateTime, todayStr } from '../utils'
+import { waLink, formatDateTime, todayStr, formatPhoneDisplay } from '../utils'
 import LeadIntelligencePanel, { SmartNoteDumper } from './LeadIntelligencePanel'
 
 const LOG_METHODS = ['Phone call', 'WhatsApp', 'Email', 'In person']
@@ -242,6 +242,14 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
               <div className="field">
                 <label>Phone</label>
                 <input value={form.phone || ''} onChange={e => set('phone', e.target.value)} placeholder="Mobile number" />
+                {form.phone && (
+                  <a
+                    href={`tel:${form.phone.replace(/\s/g, '')}`}
+                    style={{ display: 'block', fontSize: 13, color: 'var(--text2)', marginTop: 4, textDecoration: 'none', letterSpacing: '0.5px' }}
+                  >
+                    📞 {formatPhoneDisplay(form.phone)}
+                  </a>
+                )}
               </div>
               <div className="field">
                 <label>Email</label>

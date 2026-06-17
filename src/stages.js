@@ -31,3 +31,12 @@ export const SOURCES = [
   'PM Surya Ghar',
   'Other',
 ]
+// Task types — independent of pipeline stage. A lead can have a task
+// without changing where it sits in the funnel.
+export const TASK_TYPES = [
+  { key: 'demo',      label: 'Demo',           emoji: '🖥️' },
+  { key: 'proposal',  label: 'Send proposal',  emoji: '📄' },
+  { key: 'reminder',  label: 'Send reminder',  emoji: '🔔' },
+  { key: 'call',      label: 'Follow-up call', emoji: '📞' },
+  { key: 'custom',    label: 'Custom',         emoji: '✅' },
+]

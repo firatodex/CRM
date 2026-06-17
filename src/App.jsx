@@ -11,11 +11,14 @@ import ActiveDeadPanel from './components/ActiveDeadPanel'
 import ExportModal from './components/ExportModal'
 import ConfirmModal from './components/ConfirmModal'
 import FilterBar, { applyFilters } from './components/FilterBar'
+import TasksView from './components/TasksView'
 import { formatCurrency, todayStr } from './utils'
 
 export default function App() {
   const [clients, setClients] = useState([])
   const [contactLogs, setContactLogs] = useState([])
+  const [tasks, setTasks] = useState([])
+  const [clientsTab, setClientsTab] = useState('active') // 'active' | 'dead' — toggle within Clients view
   const [filters, setFilters] = useState({ search: '', temperature: '', source: '', overdueOnly: false })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -34,6 +37,7 @@ export default function App() {
     let cancelled = false
     fetchClients(() => cancelled)
     fetchContactLogs(() => cancelled)
+    fetchTasks(() => cancelled)
     return () => { cancelled = true }
   }, [])
 
@@ -99,6 +103,49 @@ export default function App() {
       from += batchSize
     }
     setContactLogs(allLogs)
+  }
+
+  async function fetchTasks(isCancelled = () => false) {
+    if (isCancelled()) return
+    const { data, error } = await supabase
+      .from('tasks').select('*')
+      .order('due_date', { ascending: true })
+    if (isCancelled()) return
+    if (error) { setError(`Failed to load tasks: ${error.message}`); return }
+    setTasks(data || [])
+  }
+
+  async function handleAddTask(clientId, taskType, note, dueDate, dueTime) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert({ client_id: clientId, task_type: taskType, note: note || null, due_date: dueDate, due_time: dueTime || null })
+      .select().single()
+    if (error) { setError(`Failed to add task: ${error.message}`); return null }
+    if (data) setTasks(prev => [...prev, data])
+    return data
+  }
+
+  async function handleTaskDone(taskId) {
+    // Remove immediately from view (silent — no history log per design decision)
+    setTasks(prev => prev.filter(t => t.id !== taskId))
+    const { error } = await supabase
+      .from('tasks')
+      .update({ done: true, done_at: new Date().toISOString() })
+      .eq('id', taskId)
+    if (error) {
+      setError(`Failed to mark task done: ${error.message}`)
+      fetchTasks() // resync on failure
+    }
+  }
+
+  async function handleTaskReschedule(taskId, newDate, newTime) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .update({ due_date: newDate, due_time: newTime })
+      .eq('id', taskId)
+      .select().single()
+    if (error) { setError(`Failed to reschedule task: ${error.message}`); return }
+    if (data) setTasks(prev => prev.map(t => t.id === taskId ? data : t))
   }
 
   async function handleAdd(form) {
@@ -239,6 +286,9 @@ export default function App() {
     !['active','dead'].includes(c.stage) && c.next_action_due && c.next_action_due <= today
   ).length
 
+  const pendingTasks = tasks.filter(t => !t.done)
+  const urgentTaskCount = pendingTasks.filter(t => t.due_date <= today).length
+
   const isBoardView = view === 'pipeline' || view === 'today'
 
   return (
@@ -259,15 +309,14 @@ export default function App() {
           <button className={`nav-btn ${view === 'dashboard' ? 'active' : ''}`} onClick={() => setView('dashboard')}>
             Dashboard
           </button>
-          {/* Active clients — won deals — now have their own view */}
+          {/* Active clients — won deals — now have their own view, with Archive accessible via toggle inside */}
           <button className={`nav-btn ${view === 'active' ? 'active' : ''}`} onClick={() => setView('active')}>
             Clients
             {activeClients.length > 0 && <span className="nav-badge green">{activeClients.length}</span>}
           </button>
-          {/* Archive badge is gray — dead leads need no urgent action */}
-          <button className={`nav-btn ${view === 'dead' ? 'active' : ''}`} onClick={() => setView('dead')}>
-            Archive
-            {deadClients.length > 0 && <span className="nav-badge" style={{ background: 'var(--bg-light)', color: 'var(--text-light)' }}>{deadClients.length}</span>}
+          <button className={`nav-btn ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')}>
+            Tasks
+            {urgentTaskCount > 0 && <span className="nav-badge red">{urgentTaskCount}</span>}
           </button>
         </nav>
         <div className="topbar-right">
@@ -351,10 +400,30 @@ export default function App() {
         ) : view === 'dashboard' ? (
           <Dashboard clients={clients} contactLogs={contactLogs} />
         ) : view === 'active' ? (
-          <ActiveDeadPanel clients={activeClients} type="active" onCardClick={setSelected} />
-        ) : (
-          <ActiveDeadPanel clients={deadClients} type="dead" onCardClick={setSelected} />
-        )}
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            <div className="clients-subtabs">
+              <button className={`subtab-btn ${clientsTab === 'active' ? 'active' : ''}`} onClick={() => setClientsTab('active')}>
+                Active <span className="subtab-count">{activeClients.length}</span>
+              </button>
+              <button className={`subtab-btn ${clientsTab === 'dead' ? 'active' : ''}`} onClick={() => setClientsTab('dead')}>
+                Archive <span className="subtab-count">{deadClients.length}</span>
+              </button>
+            </div>
+            {clientsTab === 'active' ? (
+              <ActiveDeadPanel clients={activeClients} type="active" onCardClick={setSelected} />
+            ) : (
+              <ActiveDeadPanel clients={deadClients} type="dead" onCardClick={setSelected} />
+            )}
+          </div>
+        ) : view === 'tasks' ? (
+          <TasksView
+            tasks={tasks}
+            clients={clients}
+            onDone={handleTaskDone}
+            onReschedule={handleTaskReschedule}
+            onOpenClient={setSelected}
+          />
+        ) : null}
       </div>
 
       {searchOpen && (
@@ -370,6 +439,8 @@ export default function App() {
         <DetailModal
           client={selected}
           contactLogs={contactLogs.filter(l => l.client_id === selected.id)}
+          tasks={tasks.filter(t => t.client_id === selected.id && !t.done)}
+          onAddTask={handleAddTask}
           onSave={handleSave}
           onDelete={handleDelete}
           onLogContact={handleLogContact}

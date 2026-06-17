@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { ALL_STAGES, TEMPERATURES, SOURCES } from '../stages'
+import { ALL_STAGES, TEMPERATURES, SOURCES, TASK_TYPES } from '../stages'
 import { waLink, formatDateTime, todayStr, formatPhoneDisplay } from '../utils'
 import LeadIntelligencePanel, { SmartNoteDumper } from './LeadIntelligencePanel'
 
@@ -20,7 +20,7 @@ function getLastMethod() {
   try { return localStorage.getItem('lastLogMethod') || 'Phone call' } catch { return 'Phone call' }
 }
 
-export default function DetailModal({ client, contactLogs, onSave, onDelete, onLogContact, onClose, saving }) {
+export default function DetailModal({ client, contactLogs, tasks = [], onAddTask, onSave, onDelete, onLogContact, onClose, saving }) {
   const [form, setForm] = useState({ ...client })
   const [logMethod, setLogMethod] = useState(getLastMethod)
   const [logWhatHappened, setLogWhatHappened] = useState('')
@@ -31,6 +31,11 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
   const [rightTab, setRightTab]               = useState('Log')
   const [savedFlash, setSavedFlash]           = useState(false)
   const [logSavedFlash, setLogSavedFlash]     = useState(false)
+  const [showAddTask, setShowAddTask]         = useState(false)
+  const [taskType, setTaskType]               = useState('demo')
+  const [taskNote, setTaskNote]                = useState('')
+  const [taskDate, setTaskDate]                = useState(quickDate(0))
+  const [taskTime, setTaskTime]                = useState('')
   const firstInputRef = useRef(null)
   const flashTimerRef = useRef(null)
   const logFlashTimerRef = useRef(null)
@@ -55,6 +60,16 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
   function handleSetLogMethod(m) {
     setLogMethod(m)
     try { localStorage.setItem('lastLogMethod', m) } catch {}
+  }
+
+  async function handleAddTaskSubmit() {
+    if (!taskDate) return
+    await onAddTask(client.id, taskType, taskNote.trim() || null, taskDate, taskTime || null)
+    setTaskNote('')
+    setTaskTime('')
+    setTaskDate(quickDate(0))
+    setTaskType('demo')
+    setShowAddTask(false)
   }
 
   function showFlash() {
@@ -351,6 +366,79 @@ export default function DetailModal({ client, contactLogs, onSave, onDelete, onL
                     )}
                   </div>
                 )}
+
+                {/* Tasks attached to this lead — independent of pipeline stage */}
+                <div style={{ marginBottom: 12 }}>
+                  {tasks.length > 0 && (
+                    <div style={{ marginBottom: 6 }}>
+                      {tasks.map(t => {
+                        const info = TASK_TYPES.find(tt => tt.key === t.task_type) || TASK_TYPES[TASK_TYPES.length - 1]
+                        return (
+                          <div key={t.id} style={{
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            fontSize: 12, padding: '5px 8px', marginBottom: 4,
+                            background: 'var(--bg-light)', borderRadius: 6,
+                          }}>
+                            <span>{info.emoji}</span>
+                            <span style={{ flex: 1 }}>
+                              {info.label}{t.note ? ` — ${t.note}` : ''}
+                            </span>
+                            <span style={{ color: 'var(--text-muted)' }}>
+                              {new Date(t.due_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                              {t.due_time && ` @ ${t.due_time}`}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {!showAddTask ? (
+                    <button
+                      onClick={() => setShowAddTask(true)}
+                      style={{
+                        fontSize: 12, fontWeight: 600, color: 'var(--primary)',
+                        background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0',
+                      }}
+                    >
+                      + Add task
+                    </button>
+                  ) : (
+                    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10 }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+                        {TASK_TYPES.map(t => (
+                          <button
+                            key={t.key}
+                            onClick={() => setTaskType(t.key)}
+                            style={{
+                              fontSize: 11, padding: '4px 8px', borderRadius: 6,
+                              border: `1px solid ${taskType === t.key ? 'var(--primary)' : 'var(--border)'}`,
+                              background: taskType === t.key ? 'var(--primary-light)' : 'var(--bg-white)',
+                              color: taskType === t.key ? 'var(--primary)' : 'var(--text-body)',
+                              cursor: 'pointer', fontWeight: taskType === t.key ? 600 : 400,
+                            }}
+                          >
+                            {t.emoji} {t.label}
+                          </button>
+                        ))}
+                      </div>
+                      <input
+                        value={taskNote}
+                        onChange={e => setTaskNote(e.target.value)}
+                        placeholder="Note (optional)"
+                        style={{ width: '100%', marginBottom: 8, fontSize: 13, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 6, fontFamily: 'var(--font)' }}
+                      />
+                      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                        <input type="date" value={taskDate} onChange={e => setTaskDate(e.target.value)} style={{ flex: 1, fontSize: 12, padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 6 }} />
+                        <input type="time" value={taskTime} onChange={e => setTaskTime(e.target.value)} title="Optional" style={{ fontSize: 12, padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 6 }} />
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={handleAddTaskSubmit} className="btn btn-primary btn-sm" style={{ flex: 1 }}>Add task</button>
+                        <button onClick={() => setShowAddTask(false)} className="btn btn-secondary btn-sm">Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
                   <button

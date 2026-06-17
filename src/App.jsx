@@ -12,7 +12,19 @@ import ExportModal from './components/ExportModal'
 import ConfirmModal from './components/ConfirmModal'
 import FilterBar, { applyFilters } from './components/FilterBar'
 import TasksView from './components/TasksView'
+import { useOfflineSync } from './useOfflineSync'
 import { formatCurrency, todayStr } from './utils'
+
+// Fallback UUID generator for browsers without crypto.randomUUID (pre-Chrome 92).
+// Produces a valid v4 UUID string, since the contact_log.id column is type uuid
+// and a malformed value would cause the insert itself to fail.
+function generateUuidFallback() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
 
 export default function App() {
   const [clients, setClients] = useState([])
@@ -32,6 +44,13 @@ export default function App() {
   const [showExport, setShowExport] = useState(false)
   // confirmDelete holds the client id to delete, or null
   const [confirmDelete, setConfirmDelete] = useState(null)
+
+  // Offline sync — currently scoped to logging a contact and marking a
+  // task done, the two actions most likely to happen with no signal.
+  const { isOnline, pendingCount, failedCount, syncing, queueAction } = useOfflineSync({
+    log_contact: (payload, rowId) => performLogContact(payload, rowId),
+    task_done: (payload) => performTaskDone(payload),
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -132,16 +151,38 @@ export default function App() {
     return data
   }
 
-  async function handleTaskDone(taskId) {
-    // Remove immediately from view (silent — no history log per design decision)
-    setTasks(prev => prev.filter(t => t.id !== taskId))
+  async function performTaskDone({ taskId }) {
     const { error } = await supabase
       .from('tasks')
       .update({ done: true, done_at: new Date().toISOString() })
       .eq('id', taskId)
-    if (error) {
-      setError(`Failed to mark task done: ${error.message}`)
-      fetchTasks() // resync on failure
+    if (error) throw error
+  }
+
+  async function handleTaskDone(taskId) {
+    // Remove immediately from view (silent — no history log per design decision)
+    setTasks(prev => prev.filter(t => t.id !== taskId))
+
+    if (!navigator.onLine) {
+      await queueAction('task_done', { taskId }, taskId)
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ done: true, done_at: new Date().toISOString() })
+        .eq('id', taskId)
+      if (error) throw error
+    } catch (err) {
+      // Network failure mid-flight (went offline after the click) — queue it
+      // instead of showing an error, since this is a recoverable, expected case.
+      if (!navigator.onLine || err?.message?.toLowerCase().includes('fetch')) {
+        await queueAction('task_done', { taskId }, taskId)
+      } else {
+        setError(`Failed to mark task done: ${err.message}`)
+        fetchTasks() // resync on a real failure
+      }
     }
   }
 
@@ -222,16 +263,48 @@ export default function App() {
 
   async function handleLogContact(clientId, method, whatHappened, whatNext) {
     const now = new Date().toISOString()
-    // Always write to the legacy `note` column so the insert never fails even
-    // if the new split columns haven't been added to the DB yet via the migration.
     const note = whatHappened + (whatNext ? `\n→ Next: ${whatNext}` : '')
+    const rowId = crypto.randomUUID ? crypto.randomUUID() : generateUuidFallback()
 
-    // Attempt insert with new split columns. If those columns don't exist yet
-    // in Supabase, the insert returns an error — we fall back to legacy schema.
+    // Optimistic local update — happens immediately regardless of connectivity,
+    // so the UI (History tab, last-contacted time) reflects the log right away.
+    const optimisticLog = {
+      id: rowId, client_id: clientId, method, note,
+      note_what_happened: whatHappened, note_what_next: whatNext || null,
+      contacted_at: now,
+    }
+    setContactLogs(prev => [optimisticLog, ...prev])
+    setClients(prev => prev.map(c => c.id === clientId ? { ...c, last_contacted_at: now } : c))
+
+    if (!navigator.onLine) {
+      await queueAction('log_contact', { clientId, method, note, whatHappened, whatNext, now }, rowId)
+      return
+    }
+
+    try {
+      await performLogContact({ clientId, method, note, whatHappened, whatNext, now }, rowId)
+    } catch (err) {
+      if (!navigator.onLine || err?.message?.toLowerCase().includes('fetch')) {
+        // Went offline mid-request — the optimistic update already stands,
+        // just queue the actual write for later.
+        await queueAction('log_contact', { clientId, method, note, whatHappened, whatNext, now }, rowId)
+      } else {
+        setError(`Failed to save log: ${err.message}`)
+      }
+    }
+  }
+
+  // The actual Supabase write for a contact log entry — used both for the
+  // immediate online path and when the offline queue drains. `rowId` is the
+  // client-generated UUID used as the primary key, making this safe to
+  // call twice with the same rowId (e.g. a retried sync) without creating
+  // a duplicate row.
+  async function performLogContact({ clientId, method, note, whatHappened, whatNext, now }, rowId) {
     let logData = null
     const { data: d1, error: e1 } = await supabase
       .from('contact_log')
       .insert({
+        id: rowId,
         client_id: clientId,
         method,
         note,
@@ -242,32 +315,31 @@ export default function App() {
       .select().single()
 
     if (e1) {
-      // New columns may not exist yet — retry with legacy schema only.
-      // Only treat this as the "missing column" case if the error says so;
-      // otherwise surface the real error to the user.
       const isMissingColumn = e1.message?.includes('column') || e1.code === '42703' || e1.code === 'PGRST204'
-      if (!isMissingColumn) {
-        setError(`Failed to save log: ${e1.message}`)
+      const isDuplicate = e1.code === '23505' // unique violation — this rowId was already synced
+      if (isDuplicate) {
+        // Already synced in a previous attempt — nothing more to do.
         return
       }
+      if (!isMissingColumn) throw e1
       const { data: d2, error: e2 } = await supabase
         .from('contact_log')
-        .insert({ client_id: clientId, method, note, contacted_at: now })
+        .insert({ id: rowId, client_id: clientId, method, note, contacted_at: now })
         .select().single()
       if (e2) {
-        setError(`Failed to save log: ${e2.message}`)
-        return
+        if (e2.code === '23505') return
+        throw e2
       }
       logData = d2
     } else {
       logData = d1
     }
 
-    if (logData) setContactLogs(prev => [logData, ...prev])
+    if (logData) setContactLogs(prev => prev.map(l => l.id === rowId ? logData : l))
     const { data: clientData, error: e3 } = await supabase
       .from('clients').update({ last_contacted_at: now }).eq('id', clientId).select().single()
-    if (e3) setError(`Log saved, but failed to update client's last-contacted time: ${e3.message}`)
-    else if (clientData) setClients(prev => prev.map(c => c.id === clientData.id ? clientData : c))
+    if (e3) throw e3
+    if (clientData) setClients(prev => prev.map(c => c.id === clientData.id ? clientData : c))
   }
 
   const [dropping, setDropping] = useState(false)
@@ -327,6 +399,23 @@ export default function App() {
           </button>
         </nav>
         <div className="topbar-right">
+          {/* Offline sync status — always visible, never silent */}
+          {(!isOnline || pendingCount > 0 || failedCount > 0 || syncing) && (
+            <span
+              className={`sync-status ${!isOnline ? 'sync-offline' : failedCount > 0 ? 'sync-failed' : 'sync-pending'}`}
+              title={
+                !isOnline ? `Offline — ${pendingCount} action${pendingCount !== 1 ? 's' : ''} queued`
+                : failedCount > 0 ? `${failedCount} action${failedCount !== 1 ? 's' : ''} failed to sync`
+                : syncing ? 'Syncing…'
+                : `${pendingCount} action${pendingCount !== 1 ? 's' : ''} queued`
+              }
+            >
+              {!isOnline ? `⚡ Offline${pendingCount > 0 ? ` · ${pendingCount}` : ''}`
+                : failedCount > 0 ? `⚠ ${failedCount} failed`
+                : syncing ? '↻ Syncing…'
+                : `↻ ${pendingCount} queued`}
+            </span>
+          )}
           {totalPipelineRevenue > 0 && (
             <span className="topbar-revenue" title="Pipeline potential revenue">
               {formatCurrency(totalPipelineRevenue)}

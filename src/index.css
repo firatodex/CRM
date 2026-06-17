@@ -1939,3 +1939,24 @@ body {
   border-radius: 6px;
   font-family: var(--font);
 }
+
+/* ── Offline sync status indicator ── */
+.sync-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.sync-status.sync-offline {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.sync-status.sync-pending {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+.sync-status.sync-failed {
+  background: var(--error-bg);
+  color: var(--error);
+}

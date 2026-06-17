@@ -115,10 +115,17 @@ export default function App() {
     setTasks(data || [])
   }
 
-  async function handleAddTask(clientId, taskType, note, dueDate, dueTime) {
+  async function handleAddTask(clientId, taskType, note, dueDate, dueTime, title) {
     const { data, error } = await supabase
       .from('tasks')
-      .insert({ client_id: clientId, task_type: taskType, note: note || null, due_date: dueDate, due_time: dueTime || null })
+      .insert({
+        client_id: clientId || null,
+        task_type: taskType,
+        title: title || null,
+        note: note || null,
+        due_date: dueDate,
+        due_time: dueTime || null,
+      })
       .select().single()
     if (error) { setError(`Failed to add task: ${error.message}`); return null }
     if (data) setTasks(prev => [...prev, data])
@@ -419,6 +426,7 @@ export default function App() {
           <TasksView
             tasks={tasks}
             clients={clients}
+            onAddTask={handleAddTask}
             onDone={handleTaskDone}
             onReschedule={handleTaskReschedule}
             onOpenClient={setSelected}

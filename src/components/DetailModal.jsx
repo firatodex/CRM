@@ -20,7 +20,7 @@ function getLastMethod() {
   try { return localStorage.getItem('lastLogMethod') || 'Phone call' } catch { return 'Phone call' }
 }
 
-export default function DetailModal({ client, contactLogs, tasks = [], onSave, onDelete, onLogContact, onClose, saving }) {
+export default function DetailModal({ client, contactLogs, tasks = [], onSave, onPostLogUpdate, onDelete, onLogContact, onClose, saving }) {
   const [form, setForm] = useState({ ...client })
   const [logMethod, setLogMethod] = useState(getLastMethod)
   const [logWhatHappened, setLogWhatHappened] = useState('')
@@ -31,6 +31,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
   const [rightTab, setRightTab]               = useState('Log')
   const [savedFlash, setSavedFlash]           = useState(false)
   const [logSavedFlash, setLogSavedFlash]     = useState(false)
+  const [saveWarning, setSaveWarning]         = useState(null)
   const firstInputRef = useRef(null)
   const flashTimerRef = useRef(null)
   const logFlashTimerRef = useRef(null)
@@ -57,12 +58,6 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
     try { localStorage.setItem('lastLogMethod', m) } catch {}
   }
 
-  function showFlash() {
-    if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
-    setSavedFlash(true)
-    flashTimerRef.current = setTimeout(() => setSavedFlash(false), 2000)
-  }
-
   const EDITABLE_FIELDS = [
     'name','stage','phone','email','company','business_type',
     'next_action','next_action_due','next_action_time','notes','temperature',
@@ -83,8 +78,24 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
 
   // Unified save: saves contact fields + log entry (if What happened has text)
   const handleSave = useCallback(async () => {
-    // 1. Save contact fields
-    await onSave({ ...form })
+    // 1. Save contact fields — but only if something actually changed.
+    // This matters for offline use: the most common offline action is
+    // logging a call on an unedited lead, and that should never be
+    // blocked by an unnecessary write of unchanged data.
+    //
+    // If a field WAS edited and we're offline, this save isn't queued
+    // (full-edit offline support is out of scope for now) and will fail —
+    // but it's wrapped here so that failure doesn't also swallow the log
+    // entry below, which IS offline-safe and shouldn't be lost just
+    // because an unrelated field edit couldn't reach the network.
+    let fieldSaveFailed = false
+    if (isDirty) {
+      try {
+        await onSave({ ...form })
+      } catch (err) {
+        fieldSaveFailed = true
+      }
+    }
 
     // 2. If log has content, save it too
     if (logWhatHappened.trim()) {
@@ -99,7 +110,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
       if (Object.keys(updates).length > 0) {
         const newForm = { ...form, ...updates }
         setForm(newForm)
-        await onSave({ ...client, ...newForm })
+        await onPostLogUpdate(client.id, updates)
       }
       setLogWhatHappened('')
       setLogWhatNext('')
@@ -110,7 +121,13 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
     }
 
     showFlash()
-  }, [form, logWhatHappened, logWhatNext, logDue, logTime, logMethod, onSave, onLogContact, client])
+
+    if (fieldSaveFailed) {
+      setSaveWarning("Field changes couldn't be saved (offline) — but the call log was saved. Reopen this lead once you're back online to retry the field edit.")
+    } else {
+      onClose()
+    }
+  }, [form, isDirty, logWhatHappened, logWhatNext, logDue, logTime, logMethod, onSave, onPostLogUpdate, onLogContact, onClose, client])
 
   useEffect(() => {
     function handleKey(e) {
@@ -305,6 +322,20 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                 animation: 'fadeOut 1s forwards',
               }}>
                 ✓ Logged
+              </div>
+            )}
+
+            {/* Field-save-failed warning — persists until dismissed, since it's
+                important enough that it shouldn't auto-fade like the success flash */}
+            {saveWarning && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: 'var(--warning-bg)', color: 'var(--warning)',
+                fontSize: 12, fontWeight: 600,
+                padding: '8px 10px', borderRadius: 6, marginBottom: 10,
+              }}>
+                <span style={{ flex: 1 }}>⚠ {saveWarning}</span>
+                <button onClick={() => setSaveWarning(null)} style={{ background: 'none', border: 'none', color: 'var(--warning)', cursor: 'pointer', fontWeight: 700 }}>×</button>
               </div>
             )}
 

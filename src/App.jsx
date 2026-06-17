@@ -50,6 +50,7 @@ export default function App() {
   const { isOnline, pendingCount, failedCount, syncing, queueAction } = useOfflineSync({
     log_contact: (payload, rowId) => performLogContact(payload, rowId),
     task_done: (payload) => performTaskDone(payload),
+    post_log_update: (payload) => performPostLogUpdate(payload),
   })
 
   useEffect(() => {
@@ -159,6 +160,40 @@ export default function App() {
     if (error) throw error
   }
 
+  // The post-log update: stage flip (Lead -> Contacted) and next-action
+  // fields. This is intentionally separate from the full lead-edit save
+  // (handleSave), since this specific update is the one that fires every
+  // time you log a call — including, often, while offline. Unlike an
+  // insert, an UPDATE with the same payload applied twice is naturally
+  // idempotent (re-applying "set stage = contacted" a second time changes
+  // nothing), so no special dedup key is needed here, just well-ordered
+  // queuing.
+  async function performPostLogUpdate({ clientId, updates }) {
+    const { data, error } = await supabase
+      .from('clients').update(updates).eq('id', clientId).select().single()
+    if (error) throw error
+    if (data) setClients(prev => prev.map(c => c.id === data.id ? data : c))
+  }
+
+  async function handlePostLogUpdate(clientId, updates) {
+    // Optimistic local update happens immediately either way
+    setClients(prev => prev.map(c => c.id === clientId ? { ...c, ...updates } : c))
+
+    if (!navigator.onLine) {
+      await queueAction('post_log_update', { clientId, updates })
+      return
+    }
+    try {
+      await performPostLogUpdate({ clientId, updates })
+    } catch (err) {
+      if (!navigator.onLine || err?.message?.toLowerCase().includes('fetch')) {
+        await queueAction('post_log_update', { clientId, updates })
+      } else {
+        setError(`Log saved, but failed to update the lead's stage/next action: ${err.message}`)
+      }
+    }
+  }
+
   async function handleTaskDone(taskId) {
     // Remove immediately from view (silent — no history log per design decision)
     setTasks(prev => prev.filter(t => t.id !== taskId))
@@ -230,10 +265,9 @@ export default function App() {
     }
     const { data, error } = await supabase
       .from('clients').update(payload).eq('id', form.id).select().single()
-    if (error) setError(error.message)
-    else setClients(prev => prev.map(c => c.id === data.id ? data : c))
     setSaving(false)
-    setSelected(null)
+    if (error) { setError(error.message); throw error }
+    if (data) setClients(prev => prev.map(c => c.id === data.id ? data : c))
   }
 
   async function handleUpdateClient(id, updates) {
@@ -539,6 +573,7 @@ export default function App() {
           tasks={tasks.filter(t => t.client_id === selected.id && !t.done)}
           onAddTask={handleAddTask}
           onSave={handleSave}
+          onPostLogUpdate={handlePostLogUpdate}
           onDelete={handleDelete}
           onLogContact={handleLogContact}
           onClose={() => setSelected(null)}

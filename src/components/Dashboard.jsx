@@ -2,6 +2,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
   ResponsiveContainer, BarChart, Bar, Cell, ComposedChart, Scatter
 } from 'recharts'
+import { useMemo } from 'react'
 import { PIPELINE_STAGES } from '../stages'
 import { formatCurrency, todayStr } from '../utils'
 
@@ -167,17 +168,81 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
     color: STAGE_COLORS[s.key],
   }))
 
-  // Pipeline points gauge — current reserve of unconverted pipeline value,
-  // built forward from real daily snapshots (no reconstructed history,
-  // since stage-change timestamps weren't tracked before this feature).
-  const pipelinePointsData = pipelineSnapshots.map(s => ({
-    date: s.snapshot_date,
-    label: new Date(s.snapshot_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-    points: s.points,
-    wins: s.wins_today,
-  }))
-  const currentPoints = pipelinePointsData.length > 0 ? pipelinePointsData[pipelinePointsData.length - 1].points : null
-  const totalWinsRecorded = pipelineSnapshots.reduce((sum, s) => sum + (s.wins_today || 0), 0)
+  // Pipeline reserve gauge — computed from real data, no snapshot dependency.
+  // History is built from contact_log: for each day, cumulative unique leads
+  // that had their first log entry on or before that date (a lead becoming
+  // "contacted" is the concrete event we can reconstruct from history).
+  // Today's point reads live from current client stage counts so it's always
+  // current, even after mid-day calls that move leads into Contacted.
+  const CONTACTED_W = 1
+  const PROPOSAL_W  = 8
+
+  const pipelinePointsData = useMemo(() => {
+    if (!contactLogs.length) return []
+
+    // Build a map of client_id -> earliest log date
+    const firstContactDate = {}
+    contactLogs.forEach(l => {
+      const d = l.contacted_at?.slice(0, 10)
+      if (!d) return
+      if (!firstContactDate[l.client_id] || d < firstContactDate[l.client_id]) {
+        firstContactDate[l.client_id] = d
+      }
+    })
+
+    // Sort all first-contact dates
+    const events = Object.values(firstContactDate).sort()
+    if (!events.length) return []
+
+    // Generate a daily series from first event to today
+    const startDate = events[0]
+    const endDate = today
+    const days = []
+    let cur = new Date(startDate + 'T00:00:00')
+    const end = new Date(endDate + 'T00:00:00')
+    while (cur <= end) {
+      days.push(cur.toISOString().slice(0, 10))
+      cur.setDate(cur.getDate() + 1)
+    }
+
+    // For each day, count cumulative unique leads first-contacted on or before that day
+    let cumulative = 0
+    const eventsByDay = {}
+    events.forEach(d => { eventsByDay[d] = (eventsByDay[d] || 0) + 1 })
+
+    // Won deals by date for the dots
+    const wonByDay = {}
+    clients.filter(c => c.won_at).forEach(c => {
+      const d = c.won_at.slice(0, 10)
+      wonByDay[d] = (wonByDay[d] || 0) + 1
+    })
+
+    // Current live proposal count (use real-time client data for today)
+    const currentProposalCount = clients.filter(c => c.stage === 'proposal').length
+
+    return days.map((d, i) => {
+      cumulative += (eventsByDay[d] || 0)
+      // For today, use live counts so mid-day calls are reflected immediately
+      const isToday = d === today
+      const contactedPts = isToday
+        ? clients.filter(c => c.stage === 'contacted').length * CONTACTED_W
+        : cumulative * CONTACTED_W
+      const proposalPts = currentProposalCount * PROPOSAL_W
+      const points = contactedPts + proposalPts
+      const wins = wonByDay[d] || 0
+
+      return {
+        date: d,
+        label: new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+        points,
+        wins: wins > 0 ? wins : null, // null so recharts doesn't render a zero dot
+      }
+    })
+  }, [contactLogs, clients, today])
+
+  const currentPoints = pipelinePointsData.length > 0
+    ? pipelinePointsData[pipelinePointsData.length - 1].points
+    : null
 
   const stageOrder = ['lead', 'contacted', 'proposal', 'active']
   function atOrPastStage(stageKey) {
@@ -386,37 +451,43 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
         </div>
         {pipelinePointsData.length === 0 ? (
           <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-            Starting today — check back tomorrow to see the trend begin.
-          </div>
-        ) : pipelinePointsData.length === 1 ? (
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '12px 0' }}>
-            <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--primary)' }}>{currentPoints}</span>
-            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>points in reserve today — the trend line starts building from here</span>
+            Loading…
           </div>
         ) : (
           <>
             <ResponsiveContainer width="100%" height={160}>
               <ComposedChart data={pipelinePointsData} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} interval={13} />
                 <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} allowDecimals={false} />
                 <Tooltip
                   contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border-light)' }}
-                  formatter={(v, name) => name === 'points' ? [v, 'Reserve points'] : [v, 'Deals won']}
+                  formatter={(v, name) => {
+                    if (name === 'points') return [v, 'Reserve points']
+                    if (name === 'wins') return [v, 'Deals won']
+                    return [v, name]
+                  }}
                 />
+                {/* Main reserve line — thicker, dominant, this is the story */}
                 <Line type="monotone" dataKey="points" stroke="var(--primary)" strokeWidth={2.5} dot={false} />
-                <Scatter dataKey="wins" fill="#5E8FC0" shape="circle" />
+                {/* Won deal dots — small, understated, noted not celebrated */}
+                <Scatter dataKey="wins" fill="#5E8FC0" />
               </ComposedChart>
             </ResponsiveContainer>
-            <div style={{ display: 'flex', gap: 16, marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)' }}>
                 <div style={{ width: 16, height: 2, background: 'var(--primary)', borderRadius: 1 }} />
-                Reserve (Contacted + Proposal, weighted)
+                Reserve (Contacted ×1 + Proposal ×8)
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)' }}>
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#5E8FC0' }} />
-                Deal won that day
+                Deal won
               </div>
+              {currentPoints !== null && (
+                <div style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 700, color: 'var(--primary)' }}>
+                  {currentPoints} pts now
+                </div>
+              )}
             </div>
           </>
         )}

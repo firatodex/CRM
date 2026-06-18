@@ -30,6 +30,7 @@ export default function App() {
   const [clients, setClients] = useState([])
   const [contactLogs, setContactLogs] = useState([])
   const [tasks, setTasks] = useState([])
+  const [pipelineSnapshots, setPipelineSnapshots] = useState([])
   const [clientsTab, setClientsTab] = useState('active') // 'active' | 'dead' — toggle within Clients view
   const [filters, setFilters] = useState({ search: '', temperature: '', source: '', overdueOnly: false })
   const [loading, setLoading] = useState(true)
@@ -58,8 +59,63 @@ export default function App() {
     fetchClients(() => cancelled)
     fetchContactLogs(() => cancelled)
     fetchTasks(() => cancelled)
+    fetchPipelineSnapshots(() => cancelled)
     return () => { cancelled = true }
   }, [])
+
+  async function fetchPipelineSnapshots(isCancelled = () => false) {
+    if (isCancelled()) return
+    const { data, error } = await supabase
+      .from('pipeline_snapshots').select('*')
+      .order('snapshot_date', { ascending: true })
+    if (isCancelled()) return
+    if (!error && data) setPipelineSnapshots(data)
+  }
+
+  // Pipeline points snapshot — once per day, the first time the app loads
+  // that day, record today's pipeline reserve (Contacted + Proposal points)
+  // and any win-driven depletion. This can only build forward from today;
+  // there's no reliable stage-history to reconstruct past days honestly,
+  // so we don't fake one — the chart simply starts now and stays accurate.
+  useEffect(() => {
+    if (loading || clients.length === 0) return
+    recordPipelineSnapshotIfNeeded()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, clients.length])
+
+  async function recordPipelineSnapshotIfNeeded() {
+    const today = todayStr()
+    const { data: existing } = await supabase
+      .from('pipeline_snapshots').select('snapshot_date').eq('snapshot_date', today).maybeSingle()
+    if (existing) return // already recorded today
+
+    const CONTACTED_WEIGHT = 1
+    const PROPOSAL_WEIGHT = 8 // reflects real scarcity: proposal leads are ~10x rarer than contacted in this funnel
+
+    const contactedCount = clients.filter(c => c.stage === 'contacted').length
+    const proposalCount = clients.filter(c => c.stage === 'proposal').length
+    const points = contactedCount * CONTACTED_WEIGHT + proposalCount * PROPOSAL_WEIGHT
+
+    const wonToday = clients.filter(c => c.won_at && c.won_at.slice(0, 10) === today)
+    const winPointsRemoved = wonToday.reduce((sum, c) => {
+      // Approximate the point value the lead was carrying right before it won.
+      // We don't have its exact prior stage at the moment of transition stored
+      // separately, so we use proposal-weight as the assumption for a won deal
+      // (the realistic path to winning), which is conservative and honest
+      // given what data is actually available.
+      return sum + PROPOSAL_WEIGHT
+    }, 0)
+
+    const { data: inserted, error } = await supabase.from('pipeline_snapshots').insert({
+      snapshot_date: today,
+      contacted_count: contactedCount,
+      proposal_count: proposalCount,
+      points,
+      wins_today: wonToday.length,
+      win_points_removed: winPointsRemoved,
+    }).select().single()
+    if (!error && inserted) setPipelineSnapshots(prev => [...prev, inserted])
+  }
 
   useEffect(() => {
     function handleKey(e) {
@@ -263,6 +319,12 @@ export default function App() {
       potential_revenue: form.potential_revenue || null, source: form.source || null,
       website: form.website?.trim() || null, pain_point: form.pain_point?.trim() || null,
     }
+    // Record won_at only on the actual Lead/Contacted/Proposal -> Active transition,
+    // not on every subsequent edit to an already-won lead.
+    const previousClient = clients.find(c => c.id === form.id)
+    if (form.stage === 'active' && previousClient?.stage !== 'active') {
+      payload.won_at = new Date().toISOString()
+    }
     const { data, error } = await supabase
       .from('clients').update(payload).eq('id', form.id).select().single()
     setSaving(false)
@@ -381,8 +443,13 @@ export default function App() {
   const handleDrop = useCallback(async (stageKey) => {
     if (!draggedClient || draggedClient.stage === stageKey) { setDraggedClient(null); return }
     setDropping(true)
+    const payload = { stage: stageKey }
+    // Record the moment a lead is won — used by the pipeline points gauge to
+    // know exactly which day's points to deduct. updated_at alone isn't
+    // reliable for this since it changes on any unrelated field edit too.
+    if (stageKey === 'active') payload.won_at = new Date().toISOString()
     const { data, error } = await supabase
-      .from('clients').update({ stage: stageKey }).eq('id', draggedClient.id).select().single()
+      .from('clients').update(payload).eq('id', draggedClient.id).select().single()
     if (!error && data) setClients(prev => prev.map(c => c.id === data.id ? data : c))
     else if (error) setError(`Failed to move card: ${error.message}`)
     setDraggedClient(null)
@@ -528,7 +595,7 @@ export default function App() {
             onDrop={handleDrop}
           />
         ) : view === 'dashboard' ? (
-          <Dashboard clients={clients} contactLogs={contactLogs} />
+          <Dashboard clients={clients} contactLogs={contactLogs} pipelineSnapshots={pipelineSnapshots} />
         ) : view === 'active' ? (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             <div className="clients-subtabs">

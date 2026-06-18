@@ -1,6 +1,6 @@
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
-  ResponsiveContainer, BarChart, Bar, Cell
+  ResponsiveContainer, BarChart, Bar, Cell, ComposedChart, Scatter
 } from 'recharts'
 import { PIPELINE_STAGES } from '../stages'
 import { formatCurrency, todayStr } from '../utils'
@@ -51,7 +51,7 @@ function ActivityTooltip({ active, payload }) {
   )
 }
 
-export default function Dashboard({ clients, contactLogs }) {
+export default function Dashboard({ clients, contactLogs, pipelineSnapshots = [] }) {
   const today = todayStr()
 
   const pipeline = clients.filter(c => !['active', 'dead'].includes(c.stage))
@@ -166,6 +166,18 @@ export default function Dashboard({ clients, contactLogs }) {
     count: clients.filter(c => c.stage === s.key).length,
     color: STAGE_COLORS[s.key],
   }))
+
+  // Pipeline points gauge — current reserve of unconverted pipeline value,
+  // built forward from real daily snapshots (no reconstructed history,
+  // since stage-change timestamps weren't tracked before this feature).
+  const pipelinePointsData = pipelineSnapshots.map(s => ({
+    date: s.snapshot_date,
+    label: new Date(s.snapshot_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+    points: s.points,
+    wins: s.wins_today,
+  }))
+  const currentPoints = pipelinePointsData.length > 0 ? pipelinePointsData[pipelinePointsData.length - 1].points : null
+  const totalWinsRecorded = pipelineSnapshots.reduce((sum, s) => sum + (s.wins_today || 0), 0)
 
   const stageOrder = ['lead', 'contacted', 'proposal', 'active']
   function atOrPastStage(stageKey) {
@@ -359,34 +371,59 @@ export default function Dashboard({ clients, contactLogs }) {
         )}
       </div>
 
-      {/* Row 3: Pipeline funnel + urgency + top opportunities */}
-      <div className="dash-row">
-
-        <div className="dash-card flex-1">
-          <div className="dash-card-title">Pipeline stages</div>
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={stageData} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" horizontal={false} />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-body)' }} />
-              <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} allowDecimals={false} />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border-light)' }} formatter={v => [v, 'Leads']} />
-              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                {stageData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-            {funnelRates.map(({ label, rate }) => (
-              <div key={label} style={{
-                flex: 1, background: 'var(--bg-light)', borderRadius: 6,
-                padding: '6px 10px', fontSize: 11, color: 'var(--text-light)'
-              }}>
-                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-dark)' }}>{rate}%</div>
-                {label}
-              </div>
-            ))}
-          </div>
+      {/* Pipeline points gauge — replaces the old stage bar chart. This is not
+          an effort tracker, it's a reserve gauge: how much unconverted pipeline
+          value (Contacted + Proposal leads, weighted by scarcity) is currently
+          stored, and how it depletes when a deal is won. Builds forward only —
+          no fabricated history, since stage-change dates weren't tracked
+          before this feature shipped. */}
+      <div className="dash-card" style={{ marginBottom: 16 }}>
+        <div className="dash-card-title">
+          Pipeline reserve
+          <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 8 }}>
+            Contacted + Proposal leads, weighted · drops when a deal is won
+          </span>
         </div>
+        {pipelinePointsData.length === 0 ? (
+          <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+            Starting today — check back tomorrow to see the trend begin.
+          </div>
+        ) : pipelinePointsData.length === 1 ? (
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '12px 0' }}>
+            <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--primary)' }}>{currentPoints}</span>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>points in reserve today — the trend line starts building from here</span>
+          </div>
+        ) : (
+          <>
+            <ResponsiveContainer width="100%" height={160}>
+              <ComposedChart data={pipelinePointsData} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
+                <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border-light)' }}
+                  formatter={(v, name) => name === 'points' ? [v, 'Reserve points'] : [v, 'Deals won']}
+                />
+                <Line type="monotone" dataKey="points" stroke="var(--primary)" strokeWidth={2.5} dot={false} />
+                <Scatter dataKey="wins" fill="#5E8FC0" shape="circle" />
+              </ComposedChart>
+            </ResponsiveContainer>
+            <div style={{ display: 'flex', gap: 16, marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 16, height: 2, background: 'var(--primary)', borderRadius: 1 }} />
+                Reserve (Contacted + Proposal, weighted)
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#5E8FC0' }} />
+                Deal won that day
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Row 3: urgency + top opportunities */}
+      <div className="dash-row">
 
         <div className="dash-card flex-1">
           <div className="dash-card-title">Action required</div>
@@ -404,17 +441,6 @@ export default function Dashboard({ clients, contactLogs }) {
                 )}
               </div>
             </div>
-            <div className={`alert-item ${stale.length > 0 ? 'alert-orange' : 'alert-green'}`}>
-              <span className="alert-count" style={{ color: stale.length > 0 ? 'var(--warning)' : 'var(--success)' }}>
-                {stale.length}
-              </span>
-              <div>
-                <div className="alert-text">Stale leads (7d+ no contact)</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                  {stale.length > 0 ? 'Leads going cold' : 'All leads contacted recently'}
-                </div>
-              </div>
-            </div>
             <div className={`alert-item ${noAction.length > 0 ? 'alert-orange' : 'alert-green'}`}>
               <span className="alert-count" style={{ color: noAction.length > 0 ? 'var(--warning)' : 'var(--success)' }}>
                 {noAction.length}
@@ -424,26 +450,6 @@ export default function Dashboard({ clients, contactLogs }) {
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Contacted/proposal leads without a clear next step</div>
               </div>
             </div>
-            {avgVelocity !== null && (
-              <div className="alert-item" style={{ background: 'var(--blue-bg)' }}>
-                <span className="alert-count" style={{ color: 'var(--primary)' }}>{avgVelocity}d</span>
-                <div>
-                  <div className="alert-text">Avg. days to first contact</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Lead created → first log entry</div>
-                </div>
-              </div>
-            )}
-            {avgDeal !== null && (
-              <div className="alert-item" style={{ background: 'var(--success-bg)' }}>
-                <span className="alert-count" style={{ color: 'var(--success)', fontSize: 14 }}>
-                  {formatCurrency(avgDeal)}
-                </span>
-                <div>
-                  <div className="alert-text">Avg. deal size</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Active clients only</div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 

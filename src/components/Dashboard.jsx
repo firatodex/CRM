@@ -483,7 +483,13 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
               <ComposedChart data={pipelinePointsData} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
                 <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} interval={13} />
-                <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} allowDecimals={false} />
+                {/* Left axis: reserve points (large scale, 0-150+) */}
+                <YAxis yAxisId="reserve" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} allowDecimals={false} />
+                {/* Right axis: active proposals (small scale, 0-10ish) — its own
+                    axis so it isn't visually crushed flat against the bottom by
+                    reserve's much larger range. Same underlying count as before,
+                    not weighted — only the scale it's drawn on has changed. */}
+                <YAxis yAxisId="proposals" orientation="right" tick={{ fontSize: 10, fill: '#5E8FC0' }} allowDecimals={false} />
                 <Tooltip
                   contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border-light)' }}
                   formatter={(v, name) => {
@@ -493,12 +499,12 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
                     return [v, name]
                   }}
                 />
-                {/* Reserve line — main story, thick, copper */}
-                <Line type="monotone" dataKey="reserve" stroke="var(--primary)" strokeWidth={2.5} dot={false} name="reserve" />
-                {/* Proposal line — secondary signal, thin, slate blue */}
-                <Line type="monotone" dataKey="proposals" stroke="#5E8FC0" strokeWidth={1.5} dot={false} strokeDasharray="4 2" name="proposals" />
-                {/* Won dots — sparse event markers, understated */}
-                <Scatter dataKey="wins" fill="#34C759" name="wins" />
+                {/* Reserve line — main story, thick, copper, left axis */}
+                <Line yAxisId="reserve" type="monotone" dataKey="reserve" stroke="var(--primary)" strokeWidth={2.5} dot={false} name="reserve" />
+                {/* Proposal line — own right-hand axis so it's fully visible regardless of reserve's scale */}
+                <Line yAxisId="proposals" type="monotone" dataKey="proposals" stroke="#5E8FC0" strokeWidth={1.5} dot={false} strokeDasharray="4 2" name="proposals" />
+                {/* Won dots — sparse event markers, plotted on the reserve axis since they mark reserve depletion */}
+                <Scatter yAxisId="reserve" dataKey="wins" fill="#34C759" name="wins" />
               </ComposedChart>
             </ResponsiveContainer>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8, flexWrap: 'wrap' }}>
@@ -508,7 +514,7 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)' }}>
                 <div style={{ width: 16, height: 1.5, background: '#5E8FC0', borderRadius: 1 }} />
-                Active proposals
+                Active proposals (right axis)
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)' }}>
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#34C759' }} />

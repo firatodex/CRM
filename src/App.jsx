@@ -90,26 +90,24 @@ export default function App() {
     if (existing) return // already recorded today — append-only, never overwritten
 
     const CONTACTED_WEIGHT = 1
-    const PROPOSAL_WEIGHT = 8
+    // Flat 24-point deduction per win (roughly 3 proposals' worth, since
+    // about 1 in 3 proposals converts) — a deliberately simple, explainable
+    // number for now, to be redesigned with a concrete formula once more
+    // win data exists to support a more precise one.
+    const WIN_DEDUCTION = 24
 
-    // Live counts already naturally exclude dead and won leads (they're in
-    // their own stages, not contacted/proposal), so no separate subtraction
-    // needed here — this matches the corrected logic used in the dashboard.
     const contactedCount = clients.filter(c => c.stage === 'contacted').length
     const proposalCount = clients.filter(c => c.stage === 'proposal').length
-    const points = contactedCount * CONTACTED_WEIGHT + proposalCount * 7 // proposals already counted once via contactedCount logic on dashboard side; kept consistent here as direct weight
 
     const wonToday = clients.filter(c => c.won_at && c.won_at.slice(0, 10) === today)
-    const winPointsRemoved = wonToday.reduce((sum, c) => {
-      const fromStage = c.won_from_stage || 'proposal'
-      return sum + (fromStage === 'proposal' ? PROPOSAL_WEIGHT : CONTACTED_WEIGHT)
-    }, 0)
+    const winPointsRemoved = wonToday.length * WIN_DEDUCTION
+    const points = Math.max(0, contactedCount * CONTACTED_WEIGHT + proposalCount * 7 - winPointsRemoved)
 
     const { data: inserted, error } = await supabase.from('pipeline_snapshots').insert({
       snapshot_date: today,
       contacted_count: contactedCount,
       proposal_count: proposalCount,
-      points: contactedCount * CONTACTED_WEIGHT + proposalCount * 8,
+      points,
       wins_today: wonToday.length,
       win_points_removed: winPointsRemoved,
     }).select().single()

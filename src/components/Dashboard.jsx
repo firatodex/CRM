@@ -200,34 +200,24 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
 
     // Today: computed live, mirroring the exact same formula used for the
     // frozen historical snapshots, so today's number is consistent with
-    // yesterday's once it freezes. A won lead today subtracts its direct
-    // weight (8 for proposal, 1 for contacted) from the total — same rule
-    // as every past day, just evaluated live instead of from a stored row.
+    // yesterday's once it freezes. Each win removes a flat 24 points —
+    // roughly 3 proposals' worth (8 each), reflecting that about 1 in 3
+    // proposals converts. This is a deliberately simple, explainable number
+    // for now; to be redesigned with a more precise formula once enough
+    // win data exists to support one.
+    const WIN_DEDUCTION = 24
     const liveContactedCount = clients.filter(c => c.stage === 'contacted').length
     const liveProposalCount = clients.filter(c => c.stage === 'proposal').length
     const wonTodayList = clients.filter(c => c.won_at && c.won_at.slice(0, 10) === today)
-    const wonTodayDirectWeight = wonTodayList.reduce((sum, c) => {
-      const fromStage = c.won_from_stage || 'proposal'
-      return sum + (fromStage === 'proposal' ? PROPOSAL_W : CONTACTED_W)
-    }, 0)
-
-    // Live stage counts naturally exclude won leads already (they're
-    // 'active' now), which only accounts for 1pt of a proposal-stage win's
-    // true 8pt weight. The remaining 7pt difference needs explicit
-    // subtraction to match the frozen-day formula exactly.
-    const wonTodayResidual = wonTodayList.reduce((sum, c) => {
-      const fromStage = c.won_from_stage || 'proposal'
-      const direct = fromStage === 'proposal' ? PROPOSAL_W : CONTACTED_W
-      return sum + (direct - 1) // -1 because the live count already excludes this lead once
-    }, 0)
+    const wonTodayPoints = wonTodayList.length * WIN_DEDUCTION
 
     const todayPoint = {
       date: today,
       label: new Date(today + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-      reserve: Math.max(0, (liveContactedCount - wonTodayResidual) * CONTACTED_W + liveProposalCount * 7),
+      reserve: Math.max(0, liveContactedCount * CONTACTED_W + liveProposalCount * 7 - wonTodayPoints),
       proposals: liveProposalCount,
       wins: wonTodayList.length > 0 ? wonTodayList.length : null,
-      pointsRemoved: wonTodayDirectWeight > 0 ? wonTodayDirectWeight : null,
+      pointsRemoved: wonTodayPoints > 0 ? wonTodayPoints : null,
     }
 
     return [...frozen, todayPoint]

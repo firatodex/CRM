@@ -271,44 +271,60 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
     const wonLeadCount = clients.filter(c => c.won_at).length
 
     let cumContacted = 0, cumDead = 0, cumWinPoints = 0, cumProposals = 0
+    const result = []
 
-    return days.map(d => {
-      cumContacted  += (newContactedByDay[d] || 0)
-      cumDead       += (deadByDay[d] || 0)
-      cumWinPoints  += (winPointsByDay[d] || 0)
-      cumProposals  += (proposalByDay[d] || 0)
-
+    days.forEach(d => {
+      const dayNewContacts = newContactedByDay[d] || 0
+      const dayDead        = deadByDay[d] || 0
+      const dayWinPoints   = winPointsByDay[d] || 0
+      const dayProposals   = proposalByDay[d] || 0
       const wins = wonByDay[d] || 0
-
-      // For today: use live stage counts so mid-day calls update immediately.
-      // Win-point deduction still applies on top, since a won lead has
-      // already left contacted/proposal and the ratio-weighted "extra"
-      // depletion needs to be reflected even though the live count alone
-      // wouldn't show it (the lead simply isn't in that stage anymore).
       const isToday = d === today
-      const activeContacted = isToday
-        // Live count already excludes won leads (they're 'active' now, not
-        // 'contacted') — that accounts for 1 point per win automatically.
-        // We still need to subtract the EXTRA ratio-weighted depletion
-        // beyond that direct 1-point exclusion.
-        ? Math.max(0, clients.filter(c => c.stage === 'contacted').length - (totalWinPoints - wonLeadCount))
-        : Math.max(0, cumContacted - cumDead) - cumWinPoints
-      const activeProposals = isToday
-        ? clients.filter(c => c.stage === 'proposal').length
-        : cumProposals
+      const label = new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 
-      // Reserve = active contacted x1 + active proposals x8
-      // Proposals were already counted as contacted (x1), so they get +7 more
-      const reserve = Math.max(0, activeContacted * CONTACTED_W + activeProposals * 7)
+      if (wins > 0 && !isToday) {
+        // Visible dip: plot the day in two steps so the win's deduction is
+        // never silently absorbed into a same-day net number. First point
+        // shows reserve AFTER additions but BEFORE the win's deduction
+        // (the peak that day reached), second point shows the actual
+        // post-deduction value (the recovery, or lack of it).
+        cumContacted += dayNewContacts
+        cumDead      += dayDead
+        cumProposals += dayProposals
+        const preWinActiveContacted = Math.max(0, cumContacted - cumDead) - cumWinPoints
+        const preWinReserve = Math.max(0, preWinActiveContacted * CONTACTED_W + cumProposals * 7)
 
-      return {
-        date: d,
-        label: new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-        reserve,
-        proposals: activeProposals,
-        wins: wins > 0 ? wins : null,
+        result.push({
+          date: d, label, reserve: preWinReserve, proposals: cumProposals, wins: null,
+        })
+
+        cumWinPoints += dayWinPoints
+        const postWinActiveContacted = Math.max(0, cumContacted - cumDead) - cumWinPoints
+        const postWinReserve = Math.max(0, postWinActiveContacted * CONTACTED_W + cumProposals * 7)
+
+        result.push({
+          date: d, label: `${label} ›`, reserve: postWinReserve, proposals: cumProposals, wins, pointsRemoved: dayWinPoints,
+        })
+      } else {
+        cumContacted  += dayNewContacts
+        cumDead       += dayDead
+        cumWinPoints  += dayWinPoints
+        cumProposals  += dayProposals
+
+        const activeContacted = isToday
+          ? Math.max(0, clients.filter(c => c.stage === 'contacted').length - (totalWinPoints - wonLeadCount))
+          : Math.max(0, cumContacted - cumDead) - cumWinPoints
+        const activeProposals = isToday
+          ? clients.filter(c => c.stage === 'proposal').length
+          : cumProposals
+
+        const reserve = Math.max(0, activeContacted * CONTACTED_W + activeProposals * 7)
+
+        result.push({ date: d, label, reserve, proposals: activeProposals, wins: null })
       }
     })
+
+    return result
   }, [contactLogs, clients, today])
 
   const currentPoints = pipelinePointsData.length > 0
@@ -546,6 +562,7 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
                     if (name === 'reserve') return [v, 'Reserve points']
                     if (name === 'proposals') return [v, 'Active proposals']
                     if (name === 'wins') return [v, 'Deal won']
+                    if (name === 'pointsRemoved') return [`-${v}`, 'Points removed by this win']
                     return [v, name]
                   }}
                 />

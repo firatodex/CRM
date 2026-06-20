@@ -213,11 +213,42 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
       if (d) deadByDay[d] = (deadByDay[d] || 0) + 1
     })
 
-    // Won leads per day (dots on chart + deduction)
+    // Won leads per day (dots on chart) + ratio-weighted point deduction.
+    // Logic: a win from stage X represents roughly 1/(conversion rate of X)
+    // leads' worth of pipeline that's now been "proven out" and consumed —
+    // not just the literal 1 (or 8) points that specific lead carried. The
+    // conversion rate is computed live from real data (wins from that stage
+    // ÷ all leads that have ever reached that stage or further), so it
+    // self-corrects as more deals close, rather than relying on a guessed
+    // constant that goes stale.
+    function conversionRateFromStage(stageKey) {
+      const stageOrder = ['lead', 'contacted', 'proposal', 'active']
+      const idx = stageOrder.indexOf(stageKey)
+      if (idx === -1) return null
+      const laterOrWon = stageOrder.slice(idx)
+      const everReached = clients.filter(c => laterOrWon.includes(c.stage) || c.stage === 'active').length
+      const wonFromThisStage = clients.filter(c => c.won_from_stage === stageKey).length
+      if (everReached === 0) return null
+      return wonFromThisStage / everReached
+    }
+
     const wonByDay = {}
+    const winPointsByDay = {}
     clients.filter(c => c.won_at).forEach(c => {
       const d = c.won_at.slice(0, 10)
       wonByDay[d] = (wonByDay[d] || 0) + 1
+
+      const fromStage = c.won_from_stage || 'proposal' // fallback for pre-tracking wins
+      const rate = conversionRateFromStage(fromStage)
+      // Deduction = 1 / conversion rate = how many stage-X leads it
+      // statistically took to produce this one win. Floor at the lead's own
+      // direct stage-weight (1 or 8) so the deduction is never smaller than
+      // what we know for certain it cost, even if the rate is still noisy
+      // from a small sample.
+      const directWeight = fromStage === 'proposal' ? PROPOSAL_W : CONTACTED_W
+      const ratioWeight = rate && rate > 0 ? Math.round(1 / rate) : directWeight
+      const deduction = Math.max(directWeight, ratioWeight)
+      winPointsByDay[d] = (winPointsByDay[d] || 0) + deduction
     })
 
     // Proposal leads: cumulative entries by day (using updated_at as proxy for
@@ -228,21 +259,40 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
       if (d) proposalByDay[d] = (proposalByDay[d] || 0) + 1
     })
 
-    let cumContacted = 0, cumDead = 0, cumWon = 0, cumProposals = 0
+    // Total ratio-weighted win deduction across all wins — computed once,
+    // used for today's live calculation (see comment below for why).
+    const totalWinPoints = clients.filter(c => c.won_at).reduce((sum, c) => {
+      const fromStage = c.won_from_stage || 'proposal'
+      const rate = conversionRateFromStage(fromStage)
+      const direct = fromStage === 'proposal' ? PROPOSAL_W : CONTACTED_W
+      const ratioWeight = rate && rate > 0 ? Math.round(1 / rate) : direct
+      return sum + Math.max(direct, ratioWeight)
+    }, 0)
+    const wonLeadCount = clients.filter(c => c.won_at).length
+
+    let cumContacted = 0, cumDead = 0, cumWinPoints = 0, cumProposals = 0
 
     return days.map(d => {
       cumContacted  += (newContactedByDay[d] || 0)
       cumDead       += (deadByDay[d] || 0)
-      cumWon        += (wonByDay[d] || 0)
+      cumWinPoints  += (winPointsByDay[d] || 0)
       cumProposals  += (proposalByDay[d] || 0)
 
       const wins = wonByDay[d] || 0
 
-      // For today: use live stage counts so mid-day calls update immediately
+      // For today: use live stage counts so mid-day calls update immediately.
+      // Win-point deduction still applies on top, since a won lead has
+      // already left contacted/proposal and the ratio-weighted "extra"
+      // depletion needs to be reflected even though the live count alone
+      // wouldn't show it (the lead simply isn't in that stage anymore).
       const isToday = d === today
       const activeContacted = isToday
-        ? clients.filter(c => c.stage === 'contacted').length
-        : cumContacted - cumDead - cumWon
+        // Live count already excludes won leads (they're 'active' now, not
+        // 'contacted') — that accounts for 1 point per win automatically.
+        // We still need to subtract the EXTRA ratio-weighted depletion
+        // beyond that direct 1-point exclusion.
+        ? Math.max(0, clients.filter(c => c.stage === 'contacted').length - (totalWinPoints - wonLeadCount))
+        : Math.max(0, cumContacted - cumDead) - cumWinPoints
       const activeProposals = isToday
         ? clients.filter(c => c.stage === 'proposal').length
         : cumProposals

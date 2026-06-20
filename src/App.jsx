@@ -319,11 +319,15 @@ export default function App() {
       potential_revenue: form.potential_revenue || null, source: form.source || null,
       website: form.website?.trim() || null, pain_point: form.pain_point?.trim() || null,
     }
-    // Record won_at only on the actual Lead/Contacted/Proposal -> Active transition,
-    // not on every subsequent edit to an already-won lead.
+    // Record won_at and the stage it converted FROM only on the actual
+    // transition to Active — not on every subsequent edit to an already-won
+    // lead. won_from_stage feeds the ratio-weighted depletion on the
+    // pipeline reserve gauge (e.g. a Proposal->Won uses the Proposal-specific
+    // conversion rate, not a blended one).
     const previousClient = clients.find(c => c.id === form.id)
     if (form.stage === 'active' && previousClient?.stage !== 'active') {
       payload.won_at = new Date().toISOString()
+      payload.won_from_stage = previousClient?.stage || null
     }
     const { data, error } = await supabase
       .from('clients').update(payload).eq('id', form.id).select().single()
@@ -444,10 +448,16 @@ export default function App() {
     if (!draggedClient || draggedClient.stage === stageKey) { setDraggedClient(null); return }
     setDropping(true)
     const payload = { stage: stageKey }
-    // Record the moment a lead is won — used by the pipeline points gauge to
-    // know exactly which day's points to deduct. updated_at alone isn't
-    // reliable for this since it changes on any unrelated field edit too.
-    if (stageKey === 'active') payload.won_at = new Date().toISOString()
+    // Record the moment a lead is won, and which stage it converted from —
+    // used by the pipeline reserve gauge to deduct a ratio-weighted amount
+    // specific to that stage's real conversion rate (e.g. Proposal->Won is
+    // rarer and represents more consumed pipeline than a hypothetical
+    // Contacted->Won). updated_at alone isn't reliable for the date since
+    // it changes on any unrelated field edit too.
+    if (stageKey === 'active') {
+      payload.won_at = new Date().toISOString()
+      payload.won_from_stage = draggedClient.stage
+    }
     const { data, error } = await supabase
       .from('clients').update(payload).eq('id', draggedClient.id).select().single()
     if (!error && data) setClients(prev => prev.map(c => c.id === data.id ? data : c))

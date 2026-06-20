@@ -14,10 +14,29 @@ redundancy.
 
 ## What's backed up
 
+Every table in the `public` schema is discovered **dynamically** at backup
+time (via a `list_backup_tables()` database function) and included
+automatically — not a hardcoded list. As of this writing that includes:
+
 - `clients` — every lead/client record
 - `contact_log` — every call/WhatsApp/email log entry
 - `tasks` — all tasks (demo, proposal, reminder, custom)
 - `pipeline_snapshots` — the frozen daily reserve-gauge history
+- `clients_with_website`, `pm_surya_ghar_all_vendors`,
+  `pm_surya_ghar_scan_log`, `execution_tasks` — other tables present in
+  the database, currently unused by the CRM app or empty, included for
+  completeness
+
+If a new table is ever added to the database, it will be picked up by the
+next daily backup automatically — no code change needed.
+
+## Format
+
+Each backup is a single **JSON file** (not CSV). JSON was chosen over CSV
+because it preserves each field's real data type and structure faithfully
+— a CSV would flatten everything to text and mangle any field containing
+commas or newlines (call notes routinely have both). This means a restore
+can put data back exactly as it was, not as reconstructed flat text.
 
 ## How it works
 

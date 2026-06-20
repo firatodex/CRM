@@ -195,6 +195,7 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
         reserve: s.points,
         proposals: s.proposal_count,
         wins: s.wins_today > 0 ? s.wins_today : null,
+        pointsRemoved: s.win_points_removed > 0 ? s.win_points_removed : null,
       }))
 
     // Today: computed live, mirroring the exact same formula used for the
@@ -226,6 +227,7 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
       reserve: Math.max(0, (liveContactedCount - wonTodayResidual) * CONTACTED_W + liveProposalCount * 7),
       proposals: liveProposalCount,
       wins: wonTodayList.length > 0 ? wonTodayList.length : null,
+      pointsRemoved: wonTodayDirectWeight > 0 ? wonTodayDirectWeight : null,
     }
 
     return [...frozen, todayPoint]
@@ -474,8 +476,30 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
                 <Line yAxisId="reserve" type="monotone" dataKey="reserve" stroke="var(--primary)" strokeWidth={2.5} dot={false} name="reserve" />
                 {/* Proposal line — own right-hand axis so it's fully visible regardless of reserve's scale */}
                 <Line yAxisId="proposals" type="monotone" dataKey="proposals" stroke="#5E8FC0" strokeWidth={1.5} dot={false} strokeDasharray="4 2" name="proposals" />
-                {/* Won dots — sparse event markers, plotted on the reserve axis since they mark reserve depletion */}
-                <Scatter yAxisId="reserve" dataKey="wins" fill="#34C759" name="wins" />
+                {/* Won dots — sparse event markers, plotted on the reserve axis since
+                    they mark reserve depletion. Custom shape draws the exact
+                    points-removed amount directly above the dot, so it's visible
+                    without hovering. */}
+                <Scatter
+                  yAxisId="reserve"
+                  dataKey="wins"
+                  fill="#34C759"
+                  name="wins"
+                  shape={(props) => {
+                    const { cx, cy, payload } = props
+                    if (!payload?.wins) return null
+                    return (
+                      <g>
+                        <circle cx={cx} cy={cy} r={5} fill="#34C759" />
+                        {payload.pointsRemoved && (
+                          <text x={cx} y={cy - 12} textAnchor="middle" fontSize={11} fontWeight={700} fill="#34C759">
+                            -{payload.pointsRemoved}
+                          </text>
+                        )}
+                      </g>
+                    )
+                  }}
+                />
               </ComposedChart>
             </ResponsiveContainer>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8, flexWrap: 'wrap' }}>

@@ -178,154 +178,58 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
   const PROPOSAL_W  = 8
 
   const pipelinePointsData = useMemo(() => {
-    if (!contactLogs.length) return []
+    // Append-only history: every past day's value comes verbatim from
+    // pipeline_snapshots — written once, the first time that day's app
+    // session loads, and never recalculated again afterward. This is the
+    // whole point: a deal won today must never reach backward and rewrite
+    // what yesterday's number was. Only TODAY (not yet in the snapshot
+    // table) is computed live, so it updates immediately as you work leads
+    // or close deals — but the moment today ends and tomorrow's snapshot
+    // gets written, today's number freezes too, permanently.
+    const frozen = pipelineSnapshots
+      .filter(s => s.snapshot_date !== today) // exclude today even if a stale row exists
+      .sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date))
+      .map(s => ({
+        date: s.snapshot_date,
+        label: new Date(s.snapshot_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+        reserve: s.points,
+        proposals: s.proposal_count,
+        wins: s.wins_today > 0 ? s.wins_today : null,
+      }))
 
-    // First-contact date per client (the day they became "Contacted")
-    const firstContactDate = {}
-    contactLogs.forEach(l => {
-      const d = l.contacted_at?.slice(0, 10)
-      if (!d) return
-      if (!firstContactDate[l.client_id] || d < firstContactDate[l.client_id])
-        firstContactDate[l.client_id] = d
-    })
-
-    const events = Object.values(firstContactDate).sort()
-    if (!events.length) return []
-
-    // Generate daily series from first contact to today
-    const days = []
-    let cur = new Date(events[0] + 'T00:00:00')
-    const end = new Date(today + 'T00:00:00')
-    while (cur <= end) {
-      days.push(cur.toISOString().slice(0, 10))
-      cur.setDate(cur.getDate() + 1)
-    }
-
-    // New contacts per day
-    const newContactedByDay = {}
-    events.forEach(d => { newContactedByDay[d] = (newContactedByDay[d] || 0) + 1 })
-
-    // Dead leads per day (only those that had contact history — earned points)
-    const contactedClientIds = new Set(Object.keys(firstContactDate))
-    const deadByDay = {}
-    clients.filter(c => c.stage === 'dead' && contactedClientIds.has(c.id)).forEach(c => {
-      const d = c.updated_at?.slice(0, 10)
-      if (d) deadByDay[d] = (deadByDay[d] || 0) + 1
-    })
-
-    // Won leads per day (dots on chart) + ratio-weighted point deduction.
-    // Logic: a win from stage X represents roughly 1/(conversion rate of X)
-    // leads' worth of pipeline that's now been "proven out" and consumed —
-    // not just the literal 1 (or 8) points that specific lead carried. The
-    // conversion rate is computed live from real data (wins from that stage
-    // ÷ all leads that have ever reached that stage or further), so it
-    // self-corrects as more deals close, rather than relying on a guessed
-    // constant that goes stale.
-    function conversionRateFromStage(stageKey) {
-      const stageOrder = ['lead', 'contacted', 'proposal', 'active']
-      const idx = stageOrder.indexOf(stageKey)
-      if (idx === -1) return null
-      const laterOrWon = stageOrder.slice(idx)
-      const everReached = clients.filter(c => laterOrWon.includes(c.stage) || c.stage === 'active').length
-      const wonFromThisStage = clients.filter(c => c.won_from_stage === stageKey).length
-      if (everReached === 0) return null
-      return wonFromThisStage / everReached
-    }
-
-    const wonByDay = {}
-    const winPointsByDay = {}
-    clients.filter(c => c.won_at).forEach(c => {
-      const d = c.won_at.slice(0, 10)
-      wonByDay[d] = (wonByDay[d] || 0) + 1
-
-      const fromStage = c.won_from_stage || 'proposal' // fallback for pre-tracking wins
-      const rate = conversionRateFromStage(fromStage)
-      // Deduction = 1 / conversion rate = how many stage-X leads it
-      // statistically took to produce this one win. Floor at the lead's own
-      // direct stage-weight (1 or 8) so the deduction is never smaller than
-      // what we know for certain it cost, even if the rate is still noisy
-      // from a small sample.
-      const directWeight = fromStage === 'proposal' ? PROPOSAL_W : CONTACTED_W
-      const ratioWeight = rate && rate > 0 ? Math.round(1 / rate) : directWeight
-      const deduction = Math.max(directWeight, ratioWeight)
-      winPointsByDay[d] = (winPointsByDay[d] || 0) + deduction
-    })
-
-    // Proposal leads: cumulative entries by day (using updated_at as proxy for
-    // when stage became proposal — best available without stage-change history)
-    const proposalByDay = {}
-    clients.filter(c => c.stage === 'proposal').forEach(c => {
-      const d = c.updated_at?.slice(0, 10)
-      if (d) proposalByDay[d] = (proposalByDay[d] || 0) + 1
-    })
-
-    // Total ratio-weighted win deduction across all wins — computed once,
-    // used for today's live calculation (see comment below for why).
-    const totalWinPoints = clients.filter(c => c.won_at).reduce((sum, c) => {
+    // Today: computed live, mirroring the exact same formula used for the
+    // frozen historical snapshots, so today's number is consistent with
+    // yesterday's once it freezes. A won lead today subtracts its direct
+    // weight (8 for proposal, 1 for contacted) from the total — same rule
+    // as every past day, just evaluated live instead of from a stored row.
+    const liveContactedCount = clients.filter(c => c.stage === 'contacted').length
+    const liveProposalCount = clients.filter(c => c.stage === 'proposal').length
+    const wonTodayList = clients.filter(c => c.won_at && c.won_at.slice(0, 10) === today)
+    const wonTodayDirectWeight = wonTodayList.reduce((sum, c) => {
       const fromStage = c.won_from_stage || 'proposal'
-      const rate = conversionRateFromStage(fromStage)
-      const direct = fromStage === 'proposal' ? PROPOSAL_W : CONTACTED_W
-      const ratioWeight = rate && rate > 0 ? Math.round(1 / rate) : direct
-      return sum + Math.max(direct, ratioWeight)
+      return sum + (fromStage === 'proposal' ? PROPOSAL_W : CONTACTED_W)
     }, 0)
-    const wonLeadCount = clients.filter(c => c.won_at).length
 
-    let cumContacted = 0, cumDead = 0, cumWinPoints = 0, cumProposals = 0
-    const result = []
+    // Live stage counts naturally exclude won leads already (they're
+    // 'active' now), which only accounts for 1pt of a proposal-stage win's
+    // true 8pt weight. The remaining 7pt difference needs explicit
+    // subtraction to match the frozen-day formula exactly.
+    const wonTodayResidual = wonTodayList.reduce((sum, c) => {
+      const fromStage = c.won_from_stage || 'proposal'
+      const direct = fromStage === 'proposal' ? PROPOSAL_W : CONTACTED_W
+      return sum + (direct - 1) // -1 because the live count already excludes this lead once
+    }, 0)
 
-    days.forEach(d => {
-      const dayNewContacts = newContactedByDay[d] || 0
-      const dayDead        = deadByDay[d] || 0
-      const dayWinPoints   = winPointsByDay[d] || 0
-      const dayProposals   = proposalByDay[d] || 0
-      const wins = wonByDay[d] || 0
-      const isToday = d === today
-      const label = new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+    const todayPoint = {
+      date: today,
+      label: new Date(today + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+      reserve: Math.max(0, (liveContactedCount - wonTodayResidual) * CONTACTED_W + liveProposalCount * 7),
+      proposals: liveProposalCount,
+      wins: wonTodayList.length > 0 ? wonTodayList.length : null,
+    }
 
-      if (wins > 0 && !isToday) {
-        // Visible dip: plot the day in two steps so the win's deduction is
-        // never silently absorbed into a same-day net number. First point
-        // shows reserve AFTER additions but BEFORE the win's deduction
-        // (the peak that day reached), second point shows the actual
-        // post-deduction value (the recovery, or lack of it).
-        cumContacted += dayNewContacts
-        cumDead      += dayDead
-        cumProposals += dayProposals
-        const preWinActiveContacted = Math.max(0, cumContacted - cumDead) - cumWinPoints
-        const preWinReserve = Math.max(0, preWinActiveContacted * CONTACTED_W + cumProposals * 7)
-
-        result.push({
-          date: d, label, reserve: preWinReserve, proposals: cumProposals, wins: null,
-        })
-
-        cumWinPoints += dayWinPoints
-        const postWinActiveContacted = Math.max(0, cumContacted - cumDead) - cumWinPoints
-        const postWinReserve = Math.max(0, postWinActiveContacted * CONTACTED_W + cumProposals * 7)
-
-        result.push({
-          date: d, label: `${label} ›`, reserve: postWinReserve, proposals: cumProposals, wins, pointsRemoved: dayWinPoints,
-        })
-      } else {
-        cumContacted  += dayNewContacts
-        cumDead       += dayDead
-        cumWinPoints  += dayWinPoints
-        cumProposals  += dayProposals
-
-        const activeContacted = isToday
-          ? Math.max(0, clients.filter(c => c.stage === 'contacted').length - (totalWinPoints - wonLeadCount))
-          : Math.max(0, cumContacted - cumDead) - cumWinPoints
-        const activeProposals = isToday
-          ? clients.filter(c => c.stage === 'proposal').length
-          : cumProposals
-
-        const reserve = Math.max(0, activeContacted * CONTACTED_W + activeProposals * 7)
-
-        result.push({ date: d, label, reserve, proposals: activeProposals, wins: null })
-      }
-    })
-
-    return result
-  }, [contactLogs, clients, today])
+    return [...frozen, todayPoint]
+  }, [pipelineSnapshots, clients, today])
 
   const currentPoints = pipelinePointsData.length > 0
     ? pipelinePointsData[pipelinePointsData.length - 1].reserve

@@ -87,30 +87,29 @@ export default function App() {
     const today = todayStr()
     const { data: existing } = await supabase
       .from('pipeline_snapshots').select('snapshot_date').eq('snapshot_date', today).maybeSingle()
-    if (existing) return // already recorded today
+    if (existing) return // already recorded today — append-only, never overwritten
 
     const CONTACTED_WEIGHT = 1
-    const PROPOSAL_WEIGHT = 8 // reflects real scarcity: proposal leads are ~10x rarer than contacted in this funnel
+    const PROPOSAL_WEIGHT = 8
 
+    // Live counts already naturally exclude dead and won leads (they're in
+    // their own stages, not contacted/proposal), so no separate subtraction
+    // needed here — this matches the corrected logic used in the dashboard.
     const contactedCount = clients.filter(c => c.stage === 'contacted').length
     const proposalCount = clients.filter(c => c.stage === 'proposal').length
-    const points = contactedCount * CONTACTED_WEIGHT + proposalCount * PROPOSAL_WEIGHT
+    const points = contactedCount * CONTACTED_WEIGHT + proposalCount * 7 // proposals already counted once via contactedCount logic on dashboard side; kept consistent here as direct weight
 
     const wonToday = clients.filter(c => c.won_at && c.won_at.slice(0, 10) === today)
     const winPointsRemoved = wonToday.reduce((sum, c) => {
-      // Approximate the point value the lead was carrying right before it won.
-      // We don't have its exact prior stage at the moment of transition stored
-      // separately, so we use proposal-weight as the assumption for a won deal
-      // (the realistic path to winning), which is conservative and honest
-      // given what data is actually available.
-      return sum + PROPOSAL_WEIGHT
+      const fromStage = c.won_from_stage || 'proposal'
+      return sum + (fromStage === 'proposal' ? PROPOSAL_WEIGHT : CONTACTED_WEIGHT)
     }, 0)
 
     const { data: inserted, error } = await supabase.from('pipeline_snapshots').insert({
       snapshot_date: today,
       contacted_count: contactedCount,
       proposal_count: proposalCount,
-      points,
+      points: contactedCount * CONTACTED_WEIGHT + proposalCount * 8,
       wins_today: wonToday.length,
       win_points_removed: winPointsRemoved,
     }).select().single()

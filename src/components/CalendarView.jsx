@@ -38,12 +38,17 @@ function taskTypeInfo(type) {
 function MiniCalendar({ selectedDate, onSelectDate, itemsByDate }) {
   const today = todayStr()
 
-  // Show 4 weeks starting from the Monday on or before today
+  // Show 5 weeks starting from the Monday on or before today.
+  // We use a known Monday anchor (2000-01-03 was a Monday) and compute
+  // weeks elapsed since then — completely avoids getDay() timezone issues.
   const start = useMemo(() => {
-    const d = new Date(today + 'T00:00:00')
-    const dow = d.getDay() // 0=Sun
-    d.setDate(d.getDate() - ((dow + 6) % 7)) // roll back to Monday
-    return isoDate(d)
+    const KNOWN_MONDAY = new Date('2000-01-03T00:00:00Z').getTime()
+    const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000
+    const MS_PER_DAY  = 24 * 60 * 60 * 1000
+    const todayMs = new Date(today + 'T00:00:00Z').getTime()
+    const weeksSince = Math.floor((todayMs - KNOWN_MONDAY) / MS_PER_WEEK)
+    const mondayMs = KNOWN_MONDAY + weeksSince * MS_PER_WEEK
+    return new Date(mondayMs).toISOString().slice(0, 10)
   }, [today])
 
   const weeks = useMemo(() => {

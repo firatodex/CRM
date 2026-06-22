@@ -12,6 +12,7 @@ import ExportModal from './components/ExportModal'
 import ConfirmModal from './components/ConfirmModal'
 import FilterBar, { applyFilters } from './components/FilterBar'
 import TasksView from './components/TasksView'
+import CalendarView from './components/CalendarView'
 import { useOfflineSync } from './useOfflineSync'
 import { formatCurrency, todayStr } from './utils'
 
@@ -32,6 +33,7 @@ export default function App() {
   const [tasks, setTasks] = useState([])
   const [pipelineSnapshots, setPipelineSnapshots] = useState([])
   const [clientsTab, setClientsTab] = useState('active') // 'active' | 'dead' — toggle within Clients view
+  const [tasksViewMode, setTasksViewMode] = useState('list') // 'list' | 'calendar'
   const [filters, setFilters] = useState({ search: '', temperature: '', source: '', overdueOnly: false })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -620,14 +622,36 @@ export default function App() {
             )}
           </div>
         ) : view === 'tasks' ? (
-          <TasksView
-            tasks={tasks}
-            clients={clients}
-            onAddTask={handleAddTask}
-            onDone={handleTaskDone}
-            onReschedule={handleTaskReschedule}
-            onOpenClient={setSelected}
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            <div style={{ display: 'flex', gap: 4, marginBottom: 12, flexShrink: 0 }}>
+              <button
+                className={`subtab-btn ${tasksViewMode === 'list' ? 'active' : ''}`}
+                onClick={() => setTasksViewMode('list')}
+              >☰ List</button>
+              <button
+                className={`subtab-btn ${tasksViewMode === 'calendar' ? 'active' : ''}`}
+                onClick={() => setTasksViewMode('calendar')}
+              >📅 Calendar</button>
+            </div>
+            {tasksViewMode === 'list' ? (
+              <TasksView
+                tasks={tasks}
+                clients={clients}
+                onAddTask={handleAddTask}
+                onDone={handleTaskDone}
+                onReschedule={handleTaskReschedule}
+                onOpenClient={setSelected}
+              />
+            ) : (
+              <CalendarView
+                tasks={tasks}
+                clients={clients}
+                onAddTask={handleAddTask}
+                onDone={handleTaskDone}
+                onOpenClient={setSelected}
+              />
+            )}
+          </div>
         ) : null}
       </div>
 

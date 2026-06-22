@@ -82,22 +82,20 @@ function LeadPicker({ clients, value, onChange }) {
   )
 }
 
-function AddTaskForm({ clients, onAdd, onCancel }) {
+export function AddTaskForm({ clients, onAdd, onCancel, initialDate, initialTime }) {
   const [taskType, setTaskType] = useState('custom')
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
   const [linkedClient, setLinkedClient] = useState(null)
-  const [dueDate, setDueDate] = useState(quickDate(0))
-  const [dueTime, setDueTime] = useState('')
+  const [dueDate, setDueDate] = useState(initialDate || quickDate(0))
+  const [dueTime, setDueTime] = useState(initialTime || '')
 
   function submit() {
     if (!dueDate) return
-    // If linked to a lead, the lead's name carries identity — title is optional context.
-    // If standalone, title is required to know what the task actually is.
     if (!linkedClient && !title.trim()) return
     onAdd(linkedClient ? linkedClient.id : null, taskType, note.trim() || null, dueDate, dueTime || null, title.trim() || null)
     setTaskType('custom'); setTitle(''); setNote(''); setLinkedClient(null)
-    setDueDate(quickDate(0)); setDueTime('')
+    setDueDate(initialDate || quickDate(0)); setDueTime(initialTime || '')
   }
 
   return (

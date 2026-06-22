@@ -138,6 +138,24 @@ function DayColumn({ date, items, onOpenClient, onAddAtTime, onDone }) {
   const hours = []
   for (let h = HOUR_START; h <= HOUR_END; h++) hours.push(h)
 
+  const WORK_START = 10 * 60 + 30  // 10:30am in minutes
+  const WORK_END   = 17 * 60        // 5:00pm in minutes
+  const WORK_MINS  = WORK_END - WORK_START  // 390 min
+
+  // Capacity consumed: demos = 20 min each, everything else = 5 min
+  const timedInWorkHours = timed.filter(i => {
+    const m = timeToMinutes(i.time)
+    return m !== null && m >= WORK_START && m < WORK_END
+  })
+  const demoCount = [...timedInWorkHours, ...untimed].filter(i =>
+    i.taskType === 'demo' || i.title?.toLowerCase().includes('demo') || i.note?.toLowerCase().includes('demo')
+  ).length
+  const otherCount = timedInWorkHours.length + untimed.length - demoCount
+  const usedMins = demoCount * 20 + otherCount * 5
+  const pct = Math.min(100, Math.round((usedMins / WORK_MINS) * 100))
+  const capColor = pct < 60 ? 'var(--success)' : pct < 90 ? 'var(--warning)' : 'var(--error)'
+  const freeHours = Math.max(0, Math.round((WORK_MINS - usedMins) / 60 * 10) / 10)
+
   const label = date === today
     ? 'Today'
     : new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })
@@ -147,6 +165,16 @@ function DayColumn({ date, items, onOpenClient, onAddAtTime, onDone }) {
       <div className="cal-day-col-header">
         <span className="cal-day-col-title">{label}</span>
         <span className="cal-day-col-count">{items.length} item{items.length !== 1 ? 's' : ''}</span>
+      </div>
+
+      {/* Capacity bar — 10:30am to 5pm, demos=20min, other=5min */}
+      <div className="cal-capacity-wrap" title={`${demoCount} demo${demoCount !== 1 ? 's' : ''} (${demoCount * 20}min) + ${otherCount} other items (${otherCount * 5}min) = ~${Math.round(usedMins / 60 * 10) / 10}h used of 6.5h`}>
+        <div className="cal-capacity-bar-bg">
+          <div className="cal-capacity-bar-fill" style={{ width: `${pct}%`, background: capColor }} />
+        </div>
+        <span className="cal-capacity-label" style={{ color: capColor }}>
+          {pct}% full · {freeHours}h free
+        </span>
       </div>
 
       {/* Timed timeline */}
@@ -214,7 +242,16 @@ function DayColumn({ date, items, onOpenClient, onAddAtTime, onDone }) {
       {/* Untimed items */}
       {untimed.length > 0 && (
         <div className="cal-untimed">
-          <div className="cal-untimed-label">Anytime today</div>
+          <div className="cal-untimed-label">
+            Anytime today
+            <span style={{
+              marginLeft: 6,
+              fontWeight: 700,
+              color: untimed.length <= 10 ? 'var(--success)' : untimed.length <= 25 ? 'var(--warning)' : 'var(--error)',
+            }}>
+              {untimed.length}
+            </span>
+          </div>
           {untimed.map(item => {
             const info = taskTypeInfo(item.taskType)
             return (

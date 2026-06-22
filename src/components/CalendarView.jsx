@@ -10,9 +10,10 @@ function isoDate(d) {
 }
 
 function addDays(dateStr, n) {
-  const d = new Date(dateStr + 'T00:00:00')
-  d.setDate(d.getDate() + n)
-  return isoDate(d)
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const ms = Date.UTC(y, m - 1, d + n, 12, 0, 0)
+  const dt = new Date(ms)
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`
 }
 
 function timeToMinutes(t) {
@@ -42,13 +43,22 @@ function MiniCalendar({ selectedDate, onSelectDate, itemsByDate }) {
   // We use a known Monday anchor (2000-01-03 was a Monday) and compute
   // weeks elapsed since then — completely avoids getDay() timezone issues.
   const start = useMemo(() => {
-    const KNOWN_MONDAY = new Date('2000-01-03T00:00:00Z').getTime()
+    // Use UTC noon to avoid timezone date-flip issues (e.g. IST +5:30 where
+    // T00:00:00Z = previous local day). 2000-01-03T12:00:00Z is unambiguously
+    // Monday January 3 2000 in every timezone from UTC-12 to UTC+14.
+    const KNOWN_MONDAY_NOON = new Date('2000-01-03T12:00:00Z').getTime()
     const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000
-    const MS_PER_DAY  = 24 * 60 * 60 * 1000
-    const todayMs = new Date(today + 'T00:00:00Z').getTime()
-    const weeksSince = Math.floor((todayMs - KNOWN_MONDAY) / MS_PER_WEEK)
-    const mondayMs = KNOWN_MONDAY + weeksSince * MS_PER_WEEK
-    return new Date(mondayMs).toISOString().slice(0, 10)
+    // Parse today's date parts from local time (todayStr uses local getDate/Month/Year)
+    const [y, mo, d] = today.split('-').map(Number)
+    const todayNoonMs = Date.UTC(y, mo - 1, d, 12, 0, 0)
+    const weeksSince = Math.floor((todayNoonMs - KNOWN_MONDAY_NOON) / MS_PER_WEEK)
+    const mondayNoonMs = KNOWN_MONDAY_NOON + weeksSince * MS_PER_WEEK
+    // Convert back to a date string using UTC date parts at that noon timestamp
+    const mondayDate = new Date(mondayNoonMs)
+    const my = mondayDate.getUTCFullYear()
+    const mm = String(mondayDate.getUTCMonth() + 1).padStart(2, '0')
+    const md = String(mondayDate.getUTCDate()).padStart(2, '0')
+    return `${my}-${mm}-${md}`
   }, [today])
 
   const weeks = useMemo(() => {
@@ -66,8 +76,8 @@ function MiniCalendar({ selectedDate, onSelectDate, itemsByDate }) {
   function densityClass(date) {
     const count = (itemsByDate[date] || []).length
     if (count === 0) return 'cal-density-0'
-    if (count <= 2) return 'cal-density-1'
-    if (count <= 5) return 'cal-density-2'
+    if (count <= 15) return 'cal-density-1'
+    if (count <= 30) return 'cal-density-2'
     return 'cal-density-3'
   }
 
@@ -100,9 +110,9 @@ function MiniCalendar({ selectedDate, onSelectDate, itemsByDate }) {
         </div>
       ))}
       <div className="cal-legend">
-        <span className="cal-dot cal-density-1" /> 1-2
-        <span className="cal-dot cal-density-2" style={{ marginLeft: 8 }} /> 3-5
-        <span className="cal-dot cal-density-3" style={{ marginLeft: 8 }} /> 6+
+        <span className="cal-dot cal-density-1" /> ≤15
+        <span className="cal-dot cal-density-2" style={{ marginLeft: 8 }} /> 16–30
+        <span className="cal-dot cal-density-3" style={{ marginLeft: 8 }} /> 30+
       </div>
     </div>
   )

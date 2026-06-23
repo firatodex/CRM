@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { ALL_STAGES, TEMPERATURES, SOURCES, TASK_TYPES } from '../stages'
 import { waLink, formatDateTime, todayStr, formatPhoneDisplay } from '../utils'
 import LeadIntelligencePanel, { SmartNoteDumper } from './LeadIntelligencePanel'
+import ClientTab from './ClientTab'
 
 const LOG_METHODS = ['Phone call', 'WhatsApp', 'Email', 'In person']
 
@@ -61,7 +62,8 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
   const EDITABLE_FIELDS = [
     'name','stage','phone','email','company','business_type',
     'next_action','next_action_due','next_action_time','notes','temperature',
-    'potential_revenue','source','website','pain_point'
+    'potential_revenue','proposal_value','source','website','pain_point',
+    'current_solution','objection'
   ]
   const isDirty = useMemo(() => EDITABLE_FIELDS.some(k => {
     const a = form[k] == null ? '' : String(form[k])
@@ -298,9 +300,28 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
             </div>
 
             <div className="section-label">Strategy</div>
+            {form.stage === 'proposal' && (
+              <div className="field">
+                <label>Proposal value (₹)</label>
+                <input
+                  type="number"
+                  value={form.proposal_value || ''}
+                  onChange={e => set('proposal_value', e.target.value ? Number(e.target.value) : null)}
+                  placeholder="Amount quoted in proposal"
+                />
+              </div>
+            )}
             <div className="field">
               <label>Pain point</label>
               <input value={form.pain_point || ''} onChange={e => set('pain_point', e.target.value)} placeholder="What problem are they trying to solve?" />
+            </div>
+            <div className="field">
+              <label>Current solution</label>
+              <input value={form.current_solution || ''} onChange={e => set('current_solution', e.target.value)} placeholder="What CRM / tool are they using now?" />
+            </div>
+            <div className="field">
+              <label>Main objection</label>
+              <input value={form.objection || ''} onChange={e => set('objection', e.target.value)} placeholder="Price too high, needs approval, etc." />
             </div>
 
             <div className="section-label">Notes</div>
@@ -340,24 +361,27 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
             )}
 
             {/* Tab bar */}
-            <div style={{ display: 'flex', gap: 2, marginBottom: 12, background: 'var(--bg-light)', borderRadius: 8, padding: 3, flexShrink: 0 }}>
-              {RIGHT_TABS.map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setRightTab(tab)}
-                  style={{
-                    flex: 1, padding: '5px 0', fontSize: 12, fontWeight: 600,
-                    border: 'none', borderRadius: 6, cursor: 'pointer',
-                    background: rightTab === tab ? 'var(--bg-white)' : 'transparent',
-                    color: rightTab === tab ? 'var(--primary)' : 'var(--text-light)',
-                    boxShadow: rightTab === tab ? 'var(--shadow-sm)' : 'none',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {tab === 'AI Intel' ? '✦ AI Intel' : tab}
-                  {tab === 'History' && contactLogs.length > 0 && (
-                    <span style={{
-                      marginLeft: 4, fontSize: 10, background: 'var(--border-light)',
+            {(() => {
+              const tabs = ['Log', 'History', 'AI Intel', ...(client.stage === 'active' ? ['Client'] : [])]
+              return (
+                <div style={{ display: 'flex', gap: 2, marginBottom: 12, background: 'var(--bg-light)', borderRadius: 8, padding: 3, flexShrink: 0 }}>
+                  {tabs.map(tab => (
+                    <button
+                      key={tab}
+                      onClick={() => setRightTab(tab)}
+                      style={{
+                        flex: 1, padding: '5px 0', fontSize: 12, fontWeight: 600,
+                        border: 'none', borderRadius: 6, cursor: 'pointer',
+                        background: rightTab === tab ? 'var(--bg-white)' : 'transparent',
+                        color: rightTab === tab ? 'var(--primary)' : 'var(--text-light)',
+                        boxShadow: rightTab === tab ? 'var(--shadow-sm)' : 'none',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {tab === 'AI Intel' ? '✦ AI Intel' : tab}
+                      {tab === 'History' && contactLogs.length > 0 && (
+                        <span style={{
+                          marginLeft: 4, fontSize: 10, background: 'var(--border-light)',
                       color: 'var(--text-muted)', borderRadius: 10, padding: '0 5px',
                     }}>
                       {contactLogs.length}
@@ -366,6 +390,8 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                 </button>
               ))}
             </div>
+              )
+            })()}
 
             {/* Tab: Log */}
             {rightTab === 'Log' && (
@@ -574,6 +600,10 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
             {/* Tab: AI Intel */}
             {rightTab === 'AI Intel' && (
               <LeadIntelligencePanel client={client} contactLogs={contactLogs} />
+            )}
+
+            {rightTab === 'Client' && (
+              <ClientTab client={client} />
             )}
           </div>
         </div>

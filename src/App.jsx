@@ -297,6 +297,7 @@ export default function App() {
       next_action_due: form.next_action_due || null,
       notes: null, potential_revenue: form.potential_revenue || null,
       website: null, pain_point: null,
+      proposal_value: null, current_solution: null, objection: null,
     }
     const { data, error } = await supabase.from('clients').insert(payload).select().single()
     if (error) setError(error.message)
@@ -317,6 +318,9 @@ export default function App() {
       notes: form.notes?.trim() || null, temperature: form.temperature || null,
       potential_revenue: form.potential_revenue || null, source: form.source || null,
       website: form.website?.trim() || null, pain_point: form.pain_point?.trim() || null,
+      proposal_value: form.proposal_value || null,
+      current_solution: form.current_solution?.trim() || null,
+      objection: form.objection?.trim() || null,
     }
     // Record won_at and the stage it converted FROM only on the actual
     // transition to Active — not on every subsequent edit to an already-won
@@ -332,7 +336,13 @@ export default function App() {
       .from('clients').update(payload).eq('id', form.id).select().single()
     setSaving(false)
     if (error) { setError(error.message); throw error }
-    if (data) setClients(prev => prev.map(c => c.id === data.id ? data : c))
+    if (data) {
+      setClients(prev => prev.map(c => c.id === data.id ? data : c))
+      // Auto-create deal + onboarding when a lead first moves to active
+      if (form.stage === 'active' && previousClient?.stage !== 'active') {
+        createDealIfNeeded(data)
+      }
+    }
   }
 
   async function handleUpdateClient(id, updates) {
@@ -441,6 +451,41 @@ export default function App() {
     if (clientData) setClients(prev => prev.map(c => c.id === clientData.id ? clientData : c))
   }
 
+  async function createDealIfNeeded(client) {
+    // Check if a deal already exists for this client
+    const { data: existing } = await supabase
+      .from('deals').select('id').eq('client_id', client.id).maybeSingle()
+    if (existing) return // already has a deal, don't overwrite
+
+    const dealValue = Number(client.potential_revenue) || 0
+    const today = new Date().toISOString().slice(0, 10)
+    const addDays = (d, n) => {
+      const dt = new Date(d); dt.setDate(dt.getDate() + n)
+      return dt.toISOString().slice(0, 10)
+    }
+
+    const { data: deal, error } = await supabase.from('deals').insert({
+      client_id: client.id, deal_value: dealValue,
+      payment_type: 'milestone', subscription_type: 'one_time',
+      subscription_start: today,
+    }).select().single()
+    if (error || !deal) return
+
+    const half = Math.round(dealValue / 2)
+    await supabase.from('payments').insert([
+      { deal_id: deal.id, label: 'Advance (50%)',       amount: half,            due_date: today },
+      { deal_id: deal.id, label: 'Final payment (50%)', amount: dealValue - half, due_date: addDays(today, 30) },
+    ])
+
+    const STEPS = ['Onboarding call','Setup & data migration','Training session','Go-live','Client handoff']
+    await supabase.from('onboarding_steps').insert(
+      STEPS.map((label, i) => ({
+        client_id: client.id, step_order: i, step_label: label,
+        due_date: addDays(today, i * 7),
+      }))
+    )
+  }
+
   const [dropping, setDropping] = useState(false)
 
   const handleDrop = useCallback(async (stageKey) => {
@@ -457,10 +502,13 @@ export default function App() {
       payload.won_at = new Date().toISOString()
       payload.won_from_stage = draggedClient.stage
     }
-    const { data, error } = await supabase
+    const { data: dropData, error: dropError } = await supabase
       .from('clients').update(payload).eq('id', draggedClient.id).select().single()
-    if (!error && data) setClients(prev => prev.map(c => c.id === data.id ? data : c))
-    else if (error) setError(`Failed to move card: ${error.message}`)
+    if (!dropError && dropData) {
+      setClients(prev => prev.map(c => c.id === dropData.id ? dropData : c))
+      if (stageKey === 'active') createDealIfNeeded(dropData)
+    }
+    else if (dropError) setError(`Failed to move card: ${dropError.message}`)
     setDraggedClient(null)
     setDropping(false)
   }, [draggedClient])

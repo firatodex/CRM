@@ -47,6 +47,10 @@ export default function App() {
   const [showExport, setShowExport] = useState(false)
   // confirmDelete holds the client id to delete, or null
   const [confirmDelete, setConfirmDelete] = useState(null)
+  // Payment prompt — shown when a lead moves to Active, collects deal value
+  // + received + pending before creating any records. Never auto-creates.
+  const [paymentPrompt, setPaymentPrompt] = useState(null) // { client } | null
+  const [paymentForm, setPaymentForm] = useState({ deal_value: '', received: '', pending: '', received_label: 'Advance', pending_label: 'Final payment' })
 
   // Offline sync — currently scoped to logging a contact and marking a
   // task done, the two actions most likely to happen with no signal.
@@ -340,7 +344,7 @@ export default function App() {
       setClients(prev => prev.map(c => c.id === data.id ? data : c))
       // Auto-create deal + onboarding when a lead first moves to active
       if (form.stage === 'active' && previousClient?.stage !== 'active') {
-        createDealIfNeeded(data)
+        promptForPayment(data)
       }
     }
   }
@@ -451,39 +455,49 @@ export default function App() {
     if (clientData) setClients(prev => prev.map(c => c.id === clientData.id ? clientData : c))
   }
 
-  async function createDealIfNeeded(client) {
-    // Check if a deal already exists for this client
-    const { data: existing } = await supabase
-      .from('deals').select('id').eq('client_id', client.id).maybeSingle()
-    if (existing) return // already has a deal, don't overwrite
+  function promptForPayment(client) {
+    // Never auto-create. Always ask what was received and what is pending.
+    setPaymentForm({
+      deal_value: client.potential_revenue || '',
+      received: '',
+      pending: '',
+      received_label: 'Advance',
+      pending_label: 'Final payment',
+    })
+    setPaymentPrompt({ client })
+  }
 
-    const dealValue = Number(client.potential_revenue) || 0
+  async function submitPaymentPrompt() {
+    const { client } = paymentPrompt
+    const dealValue = Number(paymentForm.deal_value) || 0
+    const received  = Number(paymentForm.received)  || 0
+    const pending   = Number(paymentForm.pending)   || 0
     const today = new Date().toISOString().slice(0, 10)
-    const addDays = (d, n) => {
-      const dt = new Date(d); dt.setDate(dt.getDate() + n)
-      return dt.toISOString().slice(0, 10)
-    }
+    const addDays = (d, n) => { const dt = new Date(d); dt.setDate(dt.getDate() + n); return dt.toISOString().slice(0, 10) }
+
+    // Check if deal already exists (e.g. re-triggering after a bug)
+    const { data: existing } = await supabase.from('deals').select('id').eq('client_id', client.id).maybeSingle()
+    if (existing) { setPaymentPrompt(null); return }
 
     const { data: deal, error } = await supabase.from('deals').insert({
       client_id: client.id, deal_value: dealValue,
       payment_type: 'milestone', subscription_type: 'one_time',
       subscription_start: today,
     }).select().single()
-    if (error || !deal) return
+    if (error || !deal) { setError('Failed to create deal: ' + error?.message); return }
 
-    const half = Math.round(dealValue / 2)
-    await supabase.from('payments').insert([
-      { deal_id: deal.id, label: 'Advance (50%)',       amount: half,            due_date: today },
-      { deal_id: deal.id, label: 'Final payment (50%)', amount: dealValue - half, due_date: addDays(today, 30) },
-    ])
+    const rows = []
+    if (received > 0) rows.push({ deal_id: deal.id, label: paymentForm.received_label, amount: received, due_date: today, paid: true, paid_at: today })
+    if (pending > 0)  rows.push({ deal_id: deal.id, label: paymentForm.pending_label,  amount: pending,  due_date: addDays(today, 30), paid: false })
+    if (rows.length > 0) await supabase.from('payments').insert(rows)
 
+    // Auto-create onboarding steps
     const STEPS = ['Onboarding call','Setup & data migration','Training session','Go-live','Client handoff']
     await supabase.from('onboarding_steps').insert(
-      STEPS.map((label, i) => ({
-        client_id: client.id, step_order: i, step_label: label,
-        due_date: addDays(today, i * 7),
-      }))
+      STEPS.map((label, i) => ({ client_id: client.id, step_order: i, step_label: label, due_date: addDays(today, i * 7) }))
     )
+
+    setPaymentPrompt(null)
   }
 
   const [dropping, setDropping] = useState(false)
@@ -506,7 +520,7 @@ export default function App() {
       .from('clients').update(payload).eq('id', draggedClient.id).select().single()
     if (!dropError && dropData) {
       setClients(prev => prev.map(c => c.id === dropData.id ? dropData : c))
-      if (stageKey === 'active') createDealIfNeeded(dropData)
+      if (stageKey === 'active') promptForPayment(dropData)
     }
     else if (dropError) setError(`Failed to move card: ${dropError.message}`)
     setDraggedClient(null)
@@ -728,6 +742,76 @@ export default function App() {
       )}
       {showExport && (
         <ExportModal clients={clients} contactLogs={contactLogs} onClose={() => setShowExport(false)} />
+      )}
+
+      {/* Payment prompt — shown when a lead moves to Active, always, never skipped */}
+      {paymentPrompt && (
+        <div className="modal-overlay" onClick={() => {}}>
+          <div className="modal-box" style={{ maxWidth: 400, padding: 24 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4, color: 'var(--text-dark)' }}>
+              🎉 Deal closed — {paymentPrompt.client.name}
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
+              Enter the payment details. You can edit these anytime in the Client tab.
+            </div>
+            <div className="field" style={{ marginBottom: 12 }}>
+              <label>Total deal value (₹)</label>
+              <input
+                type="number"
+                value={paymentForm.deal_value}
+                onChange={e => setPaymentForm(p => ({ ...p, deal_value: e.target.value }))}
+                placeholder="e.g. 21999"
+                autoFocus
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <div className="field" style={{ flex: 1 }}>
+                <label>Amount received (₹)</label>
+                <input
+                  type="number"
+                  value={paymentForm.received}
+                  onChange={e => setPaymentForm(p => ({ ...p, received: e.target.value }))}
+                  placeholder="e.g. 10999"
+                />
+              </div>
+              <div className="field" style={{ flex: 1 }}>
+                <label>Label</label>
+                <input
+                  value={paymentForm.received_label}
+                  onChange={e => setPaymentForm(p => ({ ...p, received_label: e.target.value }))}
+                  placeholder="Advance"
+                />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+              <div className="field" style={{ flex: 1 }}>
+                <label>Amount pending (₹)</label>
+                <input
+                  type="number"
+                  value={paymentForm.pending}
+                  onChange={e => setPaymentForm(p => ({ ...p, pending: e.target.value }))}
+                  placeholder="e.g. 11000"
+                />
+              </div>
+              <div className="field" style={{ flex: 1 }}>
+                <label>Label</label>
+                <input
+                  value={paymentForm.pending_label}
+                  onChange={e => setPaymentForm(p => ({ ...p, pending_label: e.target.value }))}
+                  placeholder="Final payment"
+                />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={submitPaymentPrompt}>
+                Save & continue
+              </button>
+              <button className="btn btn-secondary" onClick={() => setPaymentPrompt(null)}>
+                Skip for now
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Proper delete confirmation modal — replaces native confirm() */}

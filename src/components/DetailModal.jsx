@@ -204,28 +204,39 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
     // entry below, which IS offline-safe and shouldn't be lost just
     // because an unrelated field edit couldn't reach the network.
     let fieldSaveFailed = false
-    if (isDirty) {
-      try {
-        await onSave({ ...form })
-      } catch (err) {
-        fieldSaveFailed = true
-      }
+    const hasLog = logWhatHappened.trim().length > 0
+
+    // Build postLog updates upfront so we can merge last_contacted_at in
+    // and fire everything in parallel rather than sequentially.
+    const postUpdates = {}
+    if (hasLog) {
+      postUpdates.last_contacted_at = new Date().toISOString()
+      if (logWhatNext.trim()) postUpdates.next_action = logWhatNext.trim()
+      if (logDue) postUpdates.next_action_due = logDue
+      if (logDue && logTime) postUpdates.next_action_time = logTime
+      else if (logDue && !logTime) postUpdates.next_action_time = null
+      if (form.stage === 'lead') postUpdates.stage = 'contacted'
     }
 
-    // 2. If log has content, save it too
-    if (logWhatHappened.trim()) {
-      await onLogContact(client.id, logMethod, logWhatHappened.trim(), logWhatNext.trim() || null)
-      // Apply next action updates from log
-      const updates = {}
-      if (logWhatNext.trim()) updates.next_action = logWhatNext.trim()
-      if (logDue) updates.next_action_due = logDue
-      if (logDue && logTime) updates.next_action_time = logTime
-      else if (logDue && !logTime) updates.next_action_time = null
-      if (form.stage === 'lead') updates.stage = 'contacted'
-      if (Object.keys(updates).length > 0) {
-        const newForm = { ...form, ...updates }
-        setForm(newForm)
-        await onPostLogUpdate(client.id, updates)
+    // Run field save + log insert in parallel — cuts round trips from 4 → 2
+    const tasks = []
+    if (isDirty) {
+      tasks.push(
+        onSave({ ...form }).catch(err => { fieldSaveFailed = true })
+      )
+    }
+    if (hasLog) {
+      tasks.push(
+        onLogContact(client.id, logMethod, logWhatHappened.trim(), logWhatNext.trim() || null)
+      )
+    }
+    if (tasks.length > 0) await Promise.all(tasks)
+
+    // Single client UPDATE for all post-log field changes (stage, next action, last_contacted_at)
+    if (hasLog) {
+      if (Object.keys(postUpdates).length > 0) {
+        setForm(f => ({ ...f, ...postUpdates }))
+        await onPostLogUpdate(client.id, postUpdates)
       }
       setLogWhatHappened('')
       setLogWhatNext('')

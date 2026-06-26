@@ -456,10 +456,8 @@ export default function App() {
     }
 
     if (logData) setContactLogs(prev => prev.map(l => l.id === rowId ? logData : l))
-    const { data: clientData, error: e3 } = await supabase
-      .from('clients').update({ last_contacted_at: now }).eq('id', clientId).select().single()
-    if (e3) throw e3
-    if (clientData) setClients(prev => prev.map(c => c.id === clientData.id ? clientData : c))
+    // last_contacted_at is merged into the performPostLogUpdate client write
+    // so we don't need a separate UPDATE here — saves one round trip.
   }
 
   function promptForPayment(client) {

@@ -736,17 +736,23 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                 )}
 
                 {[
-                  { key: 'discovery_team_size', label: 'Sales Team Size', opts: [['just_me','Just me'],['2_5','2–5 people'],['5_10','5–10 people'],['10_plus','10+ people']] },
-                  { key: 'discovery_monthly_leads', label: 'Monthly Leads Volume', opts: [['lt_20','Less than 20'],['20_50','20–50'],['50_100','50–100'],['100_plus','100+']] },
-                  { key: 'discovery_current_tool', label: 'Current Tool', opts: [['nothing','Nothing / Memory'],['whatsapp','WhatsApp only'],['excel','Excel / Sheets'],['other_crm','Another CRM'],['mix','Mix of tools']] },
+                  { key: 'discovery_team_size', label: 'Sales Team Size', opts: [['just_me','Just me'],['2_5','2–5'],['5_10','5–10'],['10_plus','10+']] },
+                  { key: 'discovery_monthly_leads', label: 'Monthly Leads Volume', opts: [['lt_50','< 50'],['50_200','51–200'],['200_500','200–500'],['500_plus','500+']] },
+                  { key: 'discovery_current_tool', label: 'Current Tool', opts: [['nothing','Nothing'],['whatsapp','WhatsApp'],['excel','Excel'],['other_crm','Other CRM'],['mix','Mix']] },
                 ].map(({ key, label, opts }) => (
                   <div key={key}>
                     <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</label>
-                    <select value={form[key] || ''} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-                      style={{ width: '100%', marginTop: 4, padding: '7px 10px', borderRadius: 7, border: '1.5px solid var(--border)', fontSize: 13, background: 'var(--bg-white)', color: 'var(--text)' }}>
-                      <option value=''>Select...</option>
-                      {opts.map(([val, lbl]) => <option key={val} value={val}>{lbl}</option>)}
-                    </select>
+                    <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                      {opts.map(([val, lbl]) => (
+                        <button key={val} onClick={() => setForm(f => ({ ...f, [key]: val }))}
+                          style={{ flex: '1 1 auto', padding: '7px 6px', borderRadius: 7, border: '1.5px solid', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+                            borderColor: form[key] === val ? 'var(--primary)' : 'var(--border)',
+                            background: form[key] === val ? 'var(--primary)' : 'var(--bg-white)',
+                            color: form[key] === val ? '#fff' : 'var(--text-light)' }}>
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 ))}
 

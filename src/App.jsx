@@ -325,6 +325,13 @@ export default function App() {
       proposal_value: form.proposal_value || null,
       current_solution: form.current_solution?.trim() || null,
       objection: form.objection?.trim() || null,
+      discovery_team_size: form.discovery_team_size || null,
+      discovery_monthly_leads: form.discovery_monthly_leads || null,
+      discovery_current_tool: form.discovery_current_tool || null,
+      discovery_lost_deals: form.discovery_lost_deals || null,
+      discovery_decision_maker: form.discovery_decision_maker || null,
+      discovery_switch_openness: form.discovery_switch_openness || null,
+      discovery_completed_at: form.discovery_completed_at || null,
     }
     // Record won_at and the stage it converted FROM only on the actual
     // transition to Active — not on every subsequent edit to an already-won

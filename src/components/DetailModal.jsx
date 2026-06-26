@@ -128,7 +128,7 @@ function quickDate(daysFromNow) {
   return `${y}-${m}-${day}`
 }
 
-const RIGHT_TABS = ['Log', 'History', 'AI Intel']
+const RIGHT_TABS = ['Log', 'History', 'Discovery']
 
 function getLastMethod() {
   try { return localStorage.getItem('lastLogMethod') || 'Phone call' } catch { return 'Phone call' }
@@ -478,7 +478,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
 
             {/* Tab bar */}
             {(() => {
-              const tabs = ['Log', 'History', 'AI Intel', ...(client.stage === 'active' ? ['Client'] : [])]
+              const tabs = ['Log', 'History', 'Discovery', ...(client.stage === 'active' ? ['Client'] : [])]
               return (
                 <div style={{ display: 'flex', gap: 2, marginBottom: 12, background: 'var(--bg-light)', borderRadius: 8, padding: 3, flexShrink: 0 }}>
                   {tabs.map(tab => (
@@ -494,7 +494,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                         transition: 'all 0.15s',
                       }}
                     >
-                      {tab === 'AI Intel' ? '✦ AI Intel' : tab}
+                      {tab === 'Discovery' ? '📋 Discovery' : tab}
                       {tab === 'History' && contactLogs.length > 0 && (
                         <span style={{
                           marginLeft: 4, fontSize: 10, background: 'var(--border-light)',
@@ -713,9 +713,62 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
               </div>
             )}
 
-            {/* Tab: AI Intel */}
-            {rightTab === 'AI Intel' && (
-              <LeadIntelligencePanel client={client} contactLogs={contactLogs} />
+            {/* Tab: Discovery */}
+            {rightTab === 'Discovery' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto', paddingRight: 2 }}>
+                {form.discovery_completed_at ? (
+                  <div style={{ fontSize: 11, color: 'var(--success)', fontWeight: 600, background: '#f0fdf4', borderRadius: 6, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 4, alignSelf: 'flex-start' }}>
+                    ✓ Discovery completed {new Date(form.discovery_completed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>Fill this during or right after the first call</div>
+                )}
+
+                {[
+                  { key: 'discovery_team_size', label: 'Sales Team Size', opts: [['just_me','Just me'],['2_5','2–5 people'],['5_10','5–10 people'],['10_plus','10+ people']] },
+                  { key: 'discovery_monthly_leads', label: 'Monthly Leads Volume', opts: [['lt_20','Less than 20'],['20_50','20–50'],['50_100','50–100'],['100_plus','100+']] },
+                  { key: 'discovery_current_tool', label: 'Current Tool', opts: [['nothing','Nothing / Memory'],['whatsapp','WhatsApp only'],['excel','Excel / Sheets'],['other_crm','Another CRM'],['mix','Mix of tools']] },
+                ].map(({ key, label, opts }) => (
+                  <div key={key}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</label>
+                    <select value={form[key] || ''} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                      style={{ width: '100%', marginTop: 4, padding: '7px 10px', borderRadius: 7, border: '1.5px solid var(--border)', fontSize: 13, background: 'var(--bg-white)', color: 'var(--text)' }}>
+                      <option value=''>Select...</option>
+                      {opts.map(([val, lbl]) => <option key={val} value={val}>{lbl}</option>)}
+                    </select>
+                  </div>
+                ))}
+
+                {[
+                  { key: 'discovery_lost_deals', label: 'Lost Deal Due to Missed Follow-up?', opts: [['yes','Yes'],['no','No'],['not_sure','Not sure']] },
+                  { key: 'discovery_decision_maker', label: 'Are They the Decision Maker?', opts: [['yes','Yes'],['no','No'],['partially','Partially']] },
+                  { key: 'discovery_switch_openness', label: 'Open to Switching?', opts: [['hot','🔥 Hot'],['warm','🌤 Warm'],['cold','❄️ Cold']] },
+                ].map(({ key, label, opts }) => (
+                  <div key={key}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</label>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                      {opts.map(([val, lbl]) => (
+                        <button key={val} onClick={() => setForm(f => ({ ...f, [key]: val }))}
+                          style={{ flex: 1, padding: '7px 0', borderRadius: 7, border: '1.5px solid', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+                            borderColor: form[key] === val ? 'var(--primary)' : 'var(--border)',
+                            background: form[key] === val ? 'var(--primary)' : 'var(--bg-white)',
+                            color: form[key] === val ? '#fff' : 'var(--text-light)' }}>
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                <button
+                  onClick={() => setForm(f => ({ ...f, discovery_completed_at: f.discovery_completed_at ? null : new Date().toISOString() }))}
+                  style={{ marginTop: 4, padding: '9px 0', borderRadius: 8, border: '1.5px solid', fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s',
+                    borderColor: form.discovery_completed_at ? 'var(--border)' : 'var(--primary)',
+                    background: form.discovery_completed_at ? 'var(--bg-light)' : 'var(--primary)',
+                    color: form.discovery_completed_at ? 'var(--text-muted)' : '#fff' }}>
+                  {form.discovery_completed_at ? 'Undo — Mark Incomplete' : '✓ Mark Discovery Complete'}
+                </button>
+              </div>
             )}
 
             {rightTab === 'Client' && (

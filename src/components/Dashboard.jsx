@@ -230,7 +230,7 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
     ? pipelinePointsData[pipelinePointsData.length - 1].proposals
     : null
 
-  const stageOrder = ['lead', 'contacted', 'proposal', 'final_step', 'active']
+  const stageOrder = ['lead', 'contacted', 'proposal', 'active']
   function atOrPastStage(stageKey) {
     const idx = stageOrder.indexOf(stageKey)
     if (idx === -1) return 0

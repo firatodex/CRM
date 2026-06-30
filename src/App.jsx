@@ -12,6 +12,7 @@ import ExportModal from './components/ExportModal'
 import ConfirmModal from './components/ConfirmModal'
 import FilterBar, { applyFilters } from './components/FilterBar'
 import TasksView from './components/TasksView'
+import FinalStepView from './components/FinalStepView'
 import CalendarView from './components/CalendarView'
 import { useOfflineSync } from './useOfflineSync'
 import { formatCurrency, todayStr } from './utils'
@@ -33,7 +34,8 @@ export default function App() {
   const [tasks, setTasks] = useState([])
   const [pipelineSnapshots, setPipelineSnapshots] = useState([])
   const [clientsTab, setClientsTab] = useState('active') // 'active' | 'dead' — toggle within Clients view
-  const [tasksViewMode, setTasksViewMode] = useState('list') // 'list' | 'calendar'
+  const [tasksViewMode, setTasksViewMode] = useState('list') // 'list' | 'calendar' | 'final_step'
+  const [finalStepIds, setFinalStepIds] = useState([]) // client_ids manually flagged Final Step
   const [filters, setFilters] = useState({ search: '', temperature: '', source: '', overdueOnly: false })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -66,6 +68,7 @@ export default function App() {
     fetchContactLogs(() => cancelled)
     fetchTasks(() => cancelled)
     fetchPipelineSnapshots(() => cancelled)
+    fetchFinalStepIds(() => cancelled)
     return () => { cancelled = true }
   }, [])
 
@@ -104,17 +107,15 @@ export default function App() {
 
     const contactedCount = clients.filter(c => c.stage === 'contacted').length
     const proposalCount = clients.filter(c => c.stage === 'proposal').length
-    const finalStepCount = clients.filter(c => c.stage === 'final_step').length
 
     const wonToday = clients.filter(c => c.won_at && c.won_at.slice(0, 10) === today)
     const winPointsRemoved = wonToday.length * WIN_DEDUCTION
-    const points = Math.max(0, contactedCount * CONTACTED_WEIGHT + proposalCount * 7 + finalStepCount * 8 - winPointsRemoved)
+    const points = Math.max(0, contactedCount * CONTACTED_WEIGHT + proposalCount * 7 - winPointsRemoved)
 
     const { data: inserted, error } = await supabase.from('pipeline_snapshots').insert({
       snapshot_date: today,
       contacted_count: contactedCount,
       proposal_count: proposalCount,
-      final_step_count: finalStepCount,
       points,
       wins_today: wonToday.length,
       win_points_removed: winPointsRemoved,
@@ -196,6 +197,32 @@ export default function App() {
     setTasks(data || [])
   }
 
+  async function fetchFinalStepIds(isCancelled = () => false) {
+    if (isCancelled()) return
+    const { data, error } = await supabase.from('final_step_clients').select('client_id')
+    if (isCancelled()) return
+    if (error) { setError(`Failed to load Final Step list: ${error.message}`); return }
+    setFinalStepIds((data || []).map(r => r.client_id))
+  }
+
+  async function handleAddFinalStep(clientId) {
+    setFinalStepIds(prev => prev.includes(clientId) ? prev : [...prev, clientId])
+    const { error } = await supabase.from('final_step_clients').insert({ client_id: clientId })
+    if (error && error.code !== '23505') { // ignore duplicate-key races
+      setError(`Failed to add to Final Step: ${error.message}`)
+      setFinalStepIds(prev => prev.filter(id => id !== clientId))
+    }
+  }
+
+  async function handleRemoveFinalStep(clientId) {
+    setFinalStepIds(prev => prev.filter(id => id !== clientId))
+    const { error } = await supabase.from('final_step_clients').delete().eq('client_id', clientId)
+    if (error) {
+      setError(`Failed to remove from Final Step: ${error.message}`)
+      fetchFinalStepIds()
+    }
+  }
+
   async function handleAddTask(clientId, taskType, note, dueDate, dueTime, title) {
     const { data, error } = await supabase
       .from('tasks')
@@ -239,6 +266,15 @@ export default function App() {
   async function handlePostLogUpdate(clientId, updates) {
     // Optimistic local update happens immediately either way
     setClients(prev => prev.map(c => c.id === clientId ? { ...c, ...updates } : c))
+    if (updates.stage === 'dead' || updates.stage === 'active') {
+      // Mirrors the DB trigger locally so the UI doesn't show a stale
+      // Final Step entry until the next fetch.
+      setFinalStepIds(prev => prev.filter(id => id !== clientId))
+    }
+    if (updates.stage === 'dead') {
+      // DB trigger hard-deletes open tasks for dead leads — mirror locally too.
+      setTasks(prev => prev.filter(t => t.client_id !== clientId))
+    }
 
     if (!navigator.onLine) {
       await queueAction('post_log_update', { clientId, updates })
@@ -314,6 +350,12 @@ export default function App() {
 
   async function handleSave(form) {
     setSaving(true)
+    if (form.stage === 'dead' || form.stage === 'active') {
+      setFinalStepIds(prev => prev.filter(id => id !== form.id))
+    }
+    if (form.stage === 'dead') {
+      setTasks(prev => prev.filter(t => t.client_id !== form.id))
+    }
     const payload = {
       name: form.name?.trim(), stage: form.stage,
       phone: form.phone?.trim() || null, email: form.email?.trim() || null,
@@ -577,7 +619,7 @@ export default function App() {
             {activeClients.length > 0 && <span className="nav-badge green">{activeClients.length}</span>}
           </button>
           <button className={`nav-btn ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')}>
-            Tasks
+            Desk
             {urgentTaskCount > 0 && <span className="nav-badge red">{urgentTaskCount}</span>}
           </button>
         </nav>
@@ -705,6 +747,10 @@ export default function App() {
                 className={`subtab-btn ${tasksViewMode === 'calendar' ? 'active' : ''}`}
                 onClick={() => setTasksViewMode('calendar')}
               >📅 Calendar</button>
+              <button
+                className={`subtab-btn ${tasksViewMode === 'final_step' ? 'active' : ''}`}
+                onClick={() => setTasksViewMode('final_step')}
+              >🎯 Final Step{finalStepIds.length > 0 ? ` (${finalStepIds.length})` : ''}</button>
             </div>
             {tasksViewMode === 'list' ? (
               <TasksView
@@ -713,6 +759,14 @@ export default function App() {
                 onAddTask={handleAddTask}
                 onDone={handleTaskDone}
                 onReschedule={handleTaskReschedule}
+                onOpenClient={setSelected}
+              />
+            ) : tasksViewMode === 'final_step' ? (
+              <FinalStepView
+                clients={clients}
+                finalStepIds={finalStepIds}
+                onAdd={handleAddFinalStep}
+                onRemove={handleRemoveFinalStep}
                 onOpenClient={setSelected}
               />
             ) : (

@@ -301,7 +301,20 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
     }
     return (
       <div key={log.id} className="history-item">
-        <div className="history-method">{log.method}</div>
+        <div className="history-method">
+          {log.method}
+          {log.progress && (
+            <span
+              title="Marked as progress"
+              style={{
+                marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: '#16a34a',
+                background: 'rgba(22,163,74,0.1)', borderRadius: 4, padding: '1px 5px'
+              }}
+            >
+              📈 progress
+            </span>
+          )}
+        </div>
         {whatHappened && <div className="history-note">{whatHappened}</div>}
         {whatNext && <div className="history-next-action">→ {whatNext}</div>}
         <div className="history-time">{formatDateTime(log.contacted_at)}</div>

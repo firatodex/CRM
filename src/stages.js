@@ -1,9 +1,8 @@
 // Pipeline stages shown on the Kanban board
 export const PIPELINE_STAGES = [
-  { key: 'lead',        label: 'Lead',          color: '#8E8E93' },
-  { key: 'contacted',   label: 'Contacted',      color: '#007AFF' },
-  { key: 'proposal',    label: 'Proposal sent',  color: '#FF9500' },
-  { key: 'final_step',  label: 'Final Step',     color: '#AF52DE' },
+  { key: 'lead',      label: 'Lead',          color: '#8E8E93' },
+  { key: 'contacted', label: 'Contacted',      color: '#007AFF' },
+  { key: 'proposal',  label: 'Proposal sent',  color: '#FF9500' },
 ]
 // Terminal stages (shown in detail modal dropdown, NOT on the board)
 export const TERMINAL_STAGES = [

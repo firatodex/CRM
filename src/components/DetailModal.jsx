@@ -177,7 +177,10 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
     'name','stage','phone','email','company','business_type',
     'next_action','next_action_due','next_action_time','notes','temperature',
     'potential_revenue','proposal_value','source','website','pain_point',
-    'current_solution','objection'
+    'current_solution','objection',
+    'discovery_team_size','discovery_monthly_leads','discovery_current_tool',
+    'discovery_lost_deals','discovery_decision_maker','discovery_switch_openness',
+    'discovery_completed_at'
   ]
   const isDirty = useMemo(() => EDITABLE_FIELDS.some(k => {
     const a = form[k] == null ? '' : String(form[k])
@@ -599,7 +602,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
 
                 {!showSmartDump && (
                   <div className="log-form log-form-rich">
-                    <div className="log-method-row">
+                    <div className="log-method-row" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       {LOG_METHODS.map(m => (
                         <button
                           key={m}
@@ -609,6 +612,22 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                           {m}
                         </button>
                       ))}
+                      <label
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 5, marginLeft: 4,
+                          cursor: 'pointer', userSelect: 'none'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={logProgress}
+                          onChange={() => setLogProgress(p => !p)}
+                          style={{ width: 14, height: 14, cursor: 'pointer', accentColor: 'var(--success, #16a34a)' }}
+                        />
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: logProgress ? 'var(--success, #16a34a)' : 'var(--text-light)' }}>
+                          Progress
+                        </span>
+                      </label>
                     </div>
 
                     <div className="field" style={{ marginTop: 10 }}>
@@ -620,30 +639,6 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                         rows={3}
                       />
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setLogProgress(p => !p)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8, marginTop: 4,
-                        padding: '8px 12px', borderRadius: 8, border: '1.5px solid',
-                        borderColor: logProgress ? 'var(--success, #16a34a)' : 'var(--border)',
-                        background: logProgress ? 'rgba(22,163,74,0.08)' : 'var(--bg-white)',
-                        cursor: 'pointer', width: '100%', transition: 'all 0.15s'
-                      }}
-                    >
-                      <span style={{
-                        width: 18, height: 18, borderRadius: 5, border: '2px solid',
-                        borderColor: logProgress ? 'var(--success, #16a34a)' : 'var(--border)',
-                        background: logProgress ? 'var(--success, #16a34a)' : 'transparent',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                      }}>
-                        {logProgress && <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>✓</span>}
-                      </span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: logProgress ? 'var(--success, #16a34a)' : 'var(--text-light)' }}>
-                        📈 Mark as Progress {logProgress ? '— this call moved the deal forward' : ''}
-                      </span>
-                    </button>
 
                     <div className="field">
                       <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happens next?</label>
@@ -694,10 +689,19 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', marginBottom: 8 }}>
                       ✦ AI-filled — review and save
                     </div>
-                    <div className="log-method-row">
+                    <div className="log-method-row" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       {LOG_METHODS.map(m => (
                         <button key={m} className={`log-method-btn ${logMethod === m ? 'active' : ''}`} onClick={() => setLogMethod(m)}>{m}</button>
                       ))}
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 5, marginLeft: 4, cursor: 'pointer', userSelect: 'none' }}>
+                        <input
+                          type="checkbox"
+                          checked={logProgress}
+                          onChange={() => setLogProgress(p => !p)}
+                          style={{ width: 14, height: 14, cursor: 'pointer', accentColor: 'var(--success, #16a34a)' }}
+                        />
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: logProgress ? 'var(--success, #16a34a)' : 'var(--text-light)' }}>Progress</span>
+                      </label>
                     </div>
                     <div className="field" style={{ marginTop: 8 }}>
                       <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happened?</label>

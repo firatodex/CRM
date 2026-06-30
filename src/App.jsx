@@ -104,15 +104,17 @@ export default function App() {
 
     const contactedCount = clients.filter(c => c.stage === 'contacted').length
     const proposalCount = clients.filter(c => c.stage === 'proposal').length
+    const finalStepCount = clients.filter(c => c.stage === 'final_step').length
 
     const wonToday = clients.filter(c => c.won_at && c.won_at.slice(0, 10) === today)
     const winPointsRemoved = wonToday.length * WIN_DEDUCTION
-    const points = Math.max(0, contactedCount * CONTACTED_WEIGHT + proposalCount * 7 - winPointsRemoved)
+    const points = Math.max(0, contactedCount * CONTACTED_WEIGHT + proposalCount * 7 + finalStepCount * 8 - winPointsRemoved)
 
     const { data: inserted, error } = await supabase.from('pipeline_snapshots').insert({
       snapshot_date: today,
       contacted_count: contactedCount,
       proposal_count: proposalCount,
+      final_step_count: finalStepCount,
       points,
       wins_today: wonToday.length,
       win_points_removed: winPointsRemoved,

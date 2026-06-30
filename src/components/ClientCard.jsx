@@ -22,6 +22,19 @@ export default function ClientCard({ client, onClick, onDragStart }) {
         <div className="card-name-row">
           {temp && <span className="temp-badge" title={temp.label}>{temp.emoji}</span>}
           <span className="card-name">{client.name}</span>
+          {client.progress_count > 0 && (
+            <span
+              title={`${client.progress_count} call${client.progress_count > 1 ? 's' : ''} marked as progress`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 2,
+                fontSize: 11, fontWeight: 700, color: '#16a34a',
+                background: 'rgba(22,163,74,0.1)', borderRadius: 5,
+                padding: '1px 6px', marginLeft: 2,
+              }}
+            >
+              📈 {client.progress_count}
+            </span>
+          )}
         </div>
         {wa && (
           <button

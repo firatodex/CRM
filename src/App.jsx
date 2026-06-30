@@ -381,7 +381,7 @@ export default function App() {
     setConfirmDelete(null)
   }
 
-  async function handleLogContact(clientId, method, whatHappened, whatNext) {
+  async function handleLogContact(clientId, method, whatHappened, whatNext, progress = false) {
     const now = new Date().toISOString()
     const note = whatHappened + (whatNext ? `\n→ Next: ${whatNext}` : '')
     const rowId = crypto.randomUUID ? crypto.randomUUID() : generateUuidFallback()
@@ -391,23 +391,23 @@ export default function App() {
     const optimisticLog = {
       id: rowId, client_id: clientId, method, note,
       note_what_happened: whatHappened, note_what_next: whatNext || null,
-      contacted_at: now,
+      contacted_at: now, progress,
     }
     setContactLogs(prev => [optimisticLog, ...prev])
     setClients(prev => prev.map(c => c.id === clientId ? { ...c, last_contacted_at: now } : c))
 
     if (!navigator.onLine) {
-      await queueAction('log_contact', { clientId, method, note, whatHappened, whatNext, now }, rowId)
+      await queueAction('log_contact', { clientId, method, note, whatHappened, whatNext, now, progress }, rowId)
       return
     }
 
     try {
-      await performLogContact({ clientId, method, note, whatHappened, whatNext, now }, rowId)
+      await performLogContact({ clientId, method, note, whatHappened, whatNext, now, progress }, rowId)
     } catch (err) {
       if (!navigator.onLine || err?.message?.toLowerCase().includes('fetch')) {
         // Went offline mid-request — the optimistic update already stands,
         // just queue the actual write for later.
-        await queueAction('log_contact', { clientId, method, note, whatHappened, whatNext, now }, rowId)
+        await queueAction('log_contact', { clientId, method, note, whatHappened, whatNext, now, progress }, rowId)
       } else {
         setError(`Failed to save log: ${err.message}`)
       }
@@ -419,7 +419,7 @@ export default function App() {
   // client-generated UUID used as the primary key, making this safe to
   // call twice with the same rowId (e.g. a retried sync) without creating
   // a duplicate row.
-  async function performLogContact({ clientId, method, note, whatHappened, whatNext, now }, rowId) {
+  async function performLogContact({ clientId, method, note, whatHappened, whatNext, now, progress = false }, rowId) {
     let logData = null
     const { data: d1, error: e1 } = await supabase
       .from('contact_log')
@@ -431,6 +431,7 @@ export default function App() {
         note_what_happened: whatHappened,
         note_what_next: whatNext || null,
         contacted_at: now,
+        progress,
       })
       .select().single()
 
@@ -532,7 +533,10 @@ export default function App() {
     setDropping(false)
   }, [draggedClient])
 
-  const pipelineClients = clients.filter(c => !['active', 'dead'].includes(c.stage))
+  const pipelineClients = clients.filter(c => !['active', 'dead'].includes(c.stage)).map(c => ({
+    ...c,
+    progress_count: contactLogs.filter(l => l.client_id === c.id && l.progress).length,
+  }))
   const activeClients   = clients.filter(c => c.stage === 'active')
   const deadClients     = clients.filter(c => c.stage === 'dead')
   const totalPipelineRevenue = pipelineClients.reduce((sum, c) => sum + (Number(c.potential_revenue) || 0), 0)

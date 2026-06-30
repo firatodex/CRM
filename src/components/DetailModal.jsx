@@ -138,6 +138,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
   const [form, setForm] = useState({ ...client })
   const [logMethod, setLogMethod] = useState(getLastMethod)
   const [logWhatHappened, setLogWhatHappened] = useState('')
+  const [logProgress, setLogProgress] = useState(false)
   const [logWhatNext, setLogWhatNext]         = useState('')
   const [logDue, setLogDue]                   = useState('')
   const [logTime, setLogTime]                  = useState('')
@@ -227,7 +228,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
     }
     if (hasLog) {
       tasks.push(
-        onLogContact(client.id, logMethod, logWhatHappened.trim(), logWhatNext.trim() || null)
+        onLogContact(client.id, logMethod, logWhatHappened.trim(), logWhatNext.trim() || null, logProgress)
       )
     }
     if (tasks.length > 0) await Promise.all(tasks)
@@ -239,6 +240,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
         await onPostLogUpdate(client.id, postUpdates)
       }
       setLogWhatHappened('')
+      setLogProgress(false)
       setLogWhatNext('')
       setLogDue('')
       setLogTime('')
@@ -618,6 +620,30 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                         rows={3}
                       />
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setLogProgress(p => !p)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, marginTop: 4,
+                        padding: '8px 12px', borderRadius: 8, border: '1.5px solid',
+                        borderColor: logProgress ? 'var(--success, #16a34a)' : 'var(--border)',
+                        background: logProgress ? 'rgba(22,163,74,0.08)' : 'var(--bg-white)',
+                        cursor: 'pointer', width: '100%', transition: 'all 0.15s'
+                      }}
+                    >
+                      <span style={{
+                        width: 18, height: 18, borderRadius: 5, border: '2px solid',
+                        borderColor: logProgress ? 'var(--success, #16a34a)' : 'var(--border)',
+                        background: logProgress ? 'var(--success, #16a34a)' : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                      }}>
+                        {logProgress && <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>✓</span>}
+                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: logProgress ? 'var(--success, #16a34a)' : 'var(--text-light)' }}>
+                        📈 Mark as Progress {logProgress ? '— this call moved the deal forward' : ''}
+                      </span>
+                    </button>
 
                     <div className="field">
                       <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happens next?</label>

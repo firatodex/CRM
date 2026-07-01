@@ -223,6 +223,12 @@ export default function App() {
     }
   }
 
+  async function handleSaveFinalStepRevenue(clientId, value) {
+    setClients(prev => prev.map(c => c.id === clientId ? { ...c, potential_revenue: value } : c))
+    const { error } = await supabase.from('clients').update({ potential_revenue: value }).eq('id', clientId)
+    if (error) setError(`Failed to save revenue: ${error.message}`)
+  }
+
   async function handleAddTask(clientId, taskType, note, dueDate, dueTime, title) {
     const { data, error } = await supabase
       .from('tasks')
@@ -768,6 +774,7 @@ export default function App() {
                 onAdd={handleAddFinalStep}
                 onRemove={handleRemoveFinalStep}
                 onOpenClient={setSelected}
+                onSaveRevenue={handleSaveFinalStepRevenue}
               />
             ) : (
               <CalendarView

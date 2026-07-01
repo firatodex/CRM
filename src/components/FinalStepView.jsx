@@ -1,18 +1,15 @@
 import { useState, useMemo } from 'react'
 
-// Final Step is a manual, parallel flag — not a pipeline stage. A lead can be
-// 'proposal' stage AND flagged Final Step at the same time. The list is purely
-// opt-in: nothing lands here automatically, and nothing leaves except by your
-// own hand or the dead/active auto-cleanup trigger in the database.
-export default function FinalStepView({ clients, finalStepIds, onAdd, onRemove, onOpenClient }) {
+export default function FinalStepView({ clients, finalStepIds, onAdd, onRemove, onOpenClient, onSaveRevenue }) {
   const [search, setSearch] = useState('')
   const [showPicker, setShowPicker] = useState(false)
+  const [editingRevenue, setEditingRevenue] = useState({})
 
   const finalStepClients = useMemo(() =>
     finalStepIds
       .map(id => clients.find(c => c.id === id))
       .filter(Boolean)
-      .filter(c => !['dead', 'active'].includes(c.stage)), // safety net even before DB trigger lands
+      .filter(c => !['dead', 'active'].includes(c.stage)),
     [clients, finalStepIds]
   )
 
@@ -59,7 +56,7 @@ export default function FinalStepView({ clients, finalStepIds, onAdd, onRemove, 
               {pickerResults.map(c => (
                 <button
                   key={c.id}
-                  onClick={() => { onAdd(c.id); setSearch(''); }}
+                  onClick={() => { onAdd(c.id); setSearch('') }}
                   style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     padding: '8px 10px', borderRadius: 7, border: '1px solid var(--border)',
@@ -91,23 +88,48 @@ export default function FinalStepView({ clients, finalStepIds, onAdd, onRemove, 
             <div
               key={c.id}
               style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '12px 14px', borderRadius: 10, border: '1.5px solid var(--border)',
-                background: 'var(--bg-white)'
+                padding: '12px 14px', borderRadius: 10,
+                border: '1.5px solid var(--border)', background: 'var(--bg-white)'
               }}
             >
-              <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => onOpenClient(c)}>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>{c.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.company} · {c.stage}</div>
+              {/* Header row */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => onOpenClient(c)}>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{c.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{c.company} · {c.stage}</div>
+                </div>
+                <button
+                  onClick={() => onRemove(c.id)}
+                  title="Remove from Final Step"
+                  style={{
+                    width: 28, height: 28, borderRadius: 7, border: '1px solid var(--border)',
+                    background: 'var(--bg-light)', cursor: 'pointer', fontSize: 14,
+                    color: 'var(--text-muted)', flexShrink: 0, marginLeft: 8
+                  }}
+                >✕</button>
               </div>
-              <button
-                onClick={() => onRemove(c.id)}
-                title="Remove from Final Step"
-                style={{
-                  width: 28, height: 28, borderRadius: 7, border: '1px solid var(--border)',
-                  background: 'var(--bg-light)', cursor: 'pointer', fontSize: 14, color: 'var(--text-muted)'
-                }}
-              >✕</button>
+
+              {/* Revenue field */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0 }}>₹ Potential revenue</span>
+                <input
+                  type="number"
+                  placeholder="e.g. 21999"
+                  value={editingRevenue[c.id] !== undefined ? editingRevenue[c.id] : (c.potential_revenue || '')}
+                  onChange={e => setEditingRevenue(prev => ({ ...prev, [c.id]: e.target.value }))}
+                  onBlur={() => {
+                    const draft = editingRevenue[c.id]
+                    if (draft !== undefined && String(draft) !== String(c.potential_revenue || '')) {
+                      onSaveRevenue(c.id, draft ? Number(draft) : null)
+                    }
+                    setEditingRevenue(prev => { const n = { ...prev }; delete n[c.id]; return n })
+                  }}
+                  style={{
+                    flex: 1, padding: '5px 9px', borderRadius: 6,
+                    border: '1px solid var(--border)', fontSize: 13, background: 'var(--bg-light)'
+                  }}
+                />
+              </div>
             </div>
           ))}
         </div>

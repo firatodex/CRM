@@ -626,6 +626,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                         </button>
                       ))}
                       <label
+                        onClick={e => { e.preventDefault(); setLogProgress(p => !p) }}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 5, marginLeft: 4,
                           cursor: 'pointer', userSelect: 'none'
@@ -634,7 +635,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                         <input
                           type="checkbox"
                           checked={logProgress}
-                          onChange={() => setLogProgress(p => !p)}
+                          onChange={() => {}}
                           style={{ width: 14, height: 14, cursor: 'pointer', accentColor: 'var(--success, #16a34a)' }}
                         />
                         <span style={{ fontSize: 12.5, fontWeight: 600, color: logProgress ? 'var(--success, #16a34a)' : 'var(--text-light)' }}>
@@ -706,11 +707,11 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                       {LOG_METHODS.map(m => (
                         <button key={m} className={`log-method-btn ${logMethod === m ? 'active' : ''}`} onClick={() => setLogMethod(m)}>{m}</button>
                       ))}
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 5, marginLeft: 4, cursor: 'pointer', userSelect: 'none' }}>
+                      <label onClick={e => { e.preventDefault(); setLogProgress(p => !p) }} style={{ display: 'flex', alignItems: 'center', gap: 5, marginLeft: 4, cursor: 'pointer', userSelect: 'none' }}>
                         <input
                           type="checkbox"
                           checked={logProgress}
-                          onChange={() => setLogProgress(p => !p)}
+                          onChange={() => {}}
                           style={{ width: 14, height: 14, cursor: 'pointer', accentColor: 'var(--success, #16a34a)' }}
                         />
                         <span style={{ fontSize: 12.5, fontWeight: 600, color: logProgress ? 'var(--success, #16a34a)' : 'var(--text-light)' }}>Progress</span>

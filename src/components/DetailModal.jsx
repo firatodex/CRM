@@ -625,23 +625,25 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                           {m}
                         </button>
                       ))}
-                      <label
-                        onClick={e => { e.preventDefault(); setLogProgress(p => !p) }}
+                      <div
+                        onClick={() => setLogProgress(p => !p)}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 5, marginLeft: 4,
-                          cursor: 'pointer', userSelect: 'none'
+                          cursor: 'pointer', userSelect: 'none', padding: '3px 0'
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          checked={logProgress}
-                          onChange={() => {}}
-                          style={{ width: 14, height: 14, cursor: 'pointer', accentColor: 'var(--success, #16a34a)' }}
-                        />
-                        <span style={{ fontSize: 12.5, fontWeight: 600, color: logProgress ? 'var(--success, #16a34a)' : 'var(--text-light)' }}>
+                        <div style={{
+                          width: 16, height: 16, borderRadius: 4, border: '2px solid',
+                          borderColor: logProgress ? '#16a34a' : 'var(--border)',
+                          background: logProgress ? '#16a34a' : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                        }}>
+                          {logProgress && <span style={{ color: '#fff', fontSize: 11, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                        </div>
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: logProgress ? '#16a34a' : 'var(--text-light)' }}>
                           Progress
                         </span>
-                      </label>
+                      </div>
                     </div>
 
                     <div className="field" style={{ marginTop: 10 }}>
@@ -707,15 +709,12 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                       {LOG_METHODS.map(m => (
                         <button key={m} className={`log-method-btn ${logMethod === m ? 'active' : ''}`} onClick={() => setLogMethod(m)}>{m}</button>
                       ))}
-                      <label onClick={e => { e.preventDefault(); setLogProgress(p => !p) }} style={{ display: 'flex', alignItems: 'center', gap: 5, marginLeft: 4, cursor: 'pointer', userSelect: 'none' }}>
-                        <input
-                          type="checkbox"
-                          checked={logProgress}
-                          onChange={() => {}}
-                          style={{ width: 14, height: 14, cursor: 'pointer', accentColor: 'var(--success, #16a34a)' }}
-                        />
-                        <span style={{ fontSize: 12.5, fontWeight: 600, color: logProgress ? 'var(--success, #16a34a)' : 'var(--text-light)' }}>Progress</span>
-                      </label>
+                      <div onClick={() => setLogProgress(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: 5, marginLeft: 4, cursor: 'pointer', userSelect: 'none', padding: '3px 0' }}>
+                        <div style={{ width: 16, height: 16, borderRadius: 4, border: '2px solid', borderColor: logProgress ? '#16a34a' : 'var(--border)', background: logProgress ? '#16a34a' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {logProgress && <span style={{ color: '#fff', fontSize: 11, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                        </div>
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: logProgress ? '#16a34a' : 'var(--text-light)' }}>Progress</span>
+                      </div>
                     </div>
                     <div className="field" style={{ marginTop: 8 }}>
                       <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happened?</label>

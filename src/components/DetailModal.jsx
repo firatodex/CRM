@@ -197,21 +197,10 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
 
   // Unified save: saves contact fields + log entry (if What happened has text)
   const handleSave = useCallback(async () => {
-    // 1. Save contact fields — but only if something actually changed.
-    // This matters for offline use: the most common offline action is
-    // logging a call on an unedited lead, and that should never be
-    // blocked by an unnecessary write of unchanged data.
-    //
-    // If a field WAS edited and we're offline, this save isn't queued
-    // (full-edit offline support is out of scope for now) and will fail —
-    // but it's wrapped here so that failure doesn't also swallow the log
-    // entry below, which IS offline-safe and shouldn't be lost just
-    // because an unrelated field edit couldn't reach the network.
     let fieldSaveFailed = false
     const hasLog = logWhatHappened.trim().length > 0
 
-    // Build postLog updates upfront so we can merge last_contacted_at in
-    // and fire everything in parallel rather than sequentially.
+    // Build postLog updates upfront
     const postUpdates = {}
     if (hasLog) {
       postUpdates.last_contacted_at = new Date().toISOString()
@@ -222,43 +211,37 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
       if (form.stage === 'lead') postUpdates.stage = 'contacted'
     }
 
-    // Run field save + log insert in parallel — cuts round trips from 4 → 2
-    const tasks = []
+    // Apply all optimistic local state updates immediately
+    if (hasLog && Object.keys(postUpdates).length > 0) {
+      setForm(f => ({ ...f, ...postUpdates }))
+      onPostLogUpdate(client.id, postUpdates) // fire-and-forget
+    }
+
+    // Close the modal instantly — user doesn't wait for any DB round trip
+    onClose()
+
+    // Fire all DB writes in the background after modal is gone
+    const bgTasks = []
     if (isDirty) {
-      tasks.push(
-        onSave({ ...form }).catch(err => { fieldSaveFailed = true })
-      )
+      bgTasks.push(onSave({ ...form }).catch(() => { fieldSaveFailed = true }))
     }
     if (hasLog) {
-      tasks.push(
+      bgTasks.push(
         onLogContact(client.id, logMethod, logWhatHappened.trim(), logWhatNext.trim() || null, logProgress)
       )
     }
-    if (tasks.length > 0) await Promise.all(tasks)
-
-    // Single client UPDATE for all post-log field changes (stage, next action, last_contacted_at)
+    await Promise.all(bgTasks)
     if (hasLog) {
-      if (Object.keys(postUpdates).length > 0) {
-        setForm(f => ({ ...f, ...postUpdates }))
-        await onPostLogUpdate(client.id, postUpdates)
-      }
-      setLogWhatHappened('')
-      setLogProgress(false)
-      setLogWhatNext('')
-      setLogDue('')
-      setLogTime('')
-      setRightTab('History')
-      showLogFlash()
+      postUpdates.last_contacted_at = new Date().toISOString()
+      if (logWhatNext.trim()) postUpdates.next_action = logWhatNext.trim()
+      if (logDue) postUpdates.next_action_due = logDue
+      if (logDue && logTime) postUpdates.next_action_time = logTime
+      else if (logDue && !logTime) postUpdates.next_action_time = null
+      if (form.stage === 'lead') postUpdates.stage = 'contacted'
     }
 
-    showFlash()
-
-    if (fieldSaveFailed) {
-      setSaveWarning("Field changes couldn't be saved (offline) — but the call log was saved. Reopen this lead once you're back online to retry the field edit.")
-    } else {
-      onClose()
-    }
-  }, [form, isDirty, logWhatHappened, logWhatNext, logDue, logTime, logMethod, onSave, onPostLogUpdate, onLogContact, onClose, client])
+    // done — modal already closed above
+  }, [form, isDirty, logWhatHappened, logWhatNext, logDue, logTime, logMethod, logProgress, onSave, onPostLogUpdate, onLogContact, onClose, client])
 
   useEffect(() => {
     function handleKey(e) {

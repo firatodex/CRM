@@ -440,7 +440,6 @@ export default function App() {
     // so the UI (History tab, last-contacted time) reflects the log right away.
     const optimisticLog = {
       id: rowId, client_id: clientId, method, note,
-      note_what_happened: whatHappened, note_what_next: whatNext || null,
       contacted_at: now, progress,
     }
     setContactLogs(prev => [optimisticLog, ...prev])
@@ -470,40 +469,21 @@ export default function App() {
   // call twice with the same rowId (e.g. a retried sync) without creating
   // a duplicate row.
   async function performLogContact({ clientId, method, note, whatHappened, whatNext, now, progress = false }, rowId) {
-    let logData = null
-    const { data: d1, error: e1 } = await supabase
+    const { data: logData, error } = await supabase
       .from('contact_log')
       .insert({
         id: rowId,
         client_id: clientId,
         method,
         note,
-        note_what_happened: whatHappened,
-        note_what_next: whatNext || null,
         contacted_at: now,
         progress,
       })
       .select().single()
 
-    if (e1) {
-      const isMissingColumn = e1.message?.includes('column') || e1.code === '42703' || e1.code === 'PGRST204'
-      const isDuplicate = e1.code === '23505' // unique violation — this rowId was already synced
-      if (isDuplicate) {
-        // Already synced in a previous attempt — nothing more to do.
-        return
-      }
-      if (!isMissingColumn) throw e1
-      const { data: d2, error: e2 } = await supabase
-        .from('contact_log')
-        .insert({ id: rowId, client_id: clientId, method, note, contacted_at: now })
-        .select().single()
-      if (e2) {
-        if (e2.code === '23505') return
-        throw e2
-      }
-      logData = d2
-    } else {
-      logData = d1
+    if (error) {
+      if (error.code === '23505') return // already synced
+      throw error
     }
 
     if (logData) setContactLogs(prev => prev.map(l => l.id === rowId ? logData : l))

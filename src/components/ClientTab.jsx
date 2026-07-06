@@ -110,6 +110,46 @@ export default function ClientTab({ client }) {
     setSaving(false)
   }
 
+  async function markDelivered() {
+    const today = new Date().toISOString().slice(0, 10)
+    await supabase.from('deals').update({ delivery_status: true, delivered_at: today }).eq('id', deal.id)
+    setDeal(d => ({ ...d, delivery_status: true, delivered_at: today }))
+  }
+
+  async function unmarkDelivered() {
+    await supabase.from('deals').update({ delivery_status: false, delivered_at: null }).eq('id', deal.id)
+    setDeal(d => ({ ...d, delivery_status: false, delivered_at: null }))
+  }
+
+  function daysRemaining(fromDate, totalDays) {
+    if (!fromDate) return null
+    const end = new Date(fromDate)
+    end.setDate(end.getDate() + totalDays)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return Math.ceil((end - today) / (1000 * 60 * 60 * 24))
+  }
+
+  function CountdownBar({ label, fromDate, totalDays, color }) {
+    const remaining = daysRemaining(fromDate, totalDays)
+    const elapsed = totalDays - (remaining > 0 ? remaining : 0)
+    const pct = Math.min(100, Math.round((elapsed / totalDays) * 100))
+    const expired = remaining !== null && remaining <= 0
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{label}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: expired ? 'var(--text-muted)' : remaining <= 7 ? '#dc2626' : color }}>
+            {expired ? 'Expired' : `${remaining}d left`}
+          </span>
+        </div>
+        <div style={{ height: 5, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+          <div style={{ height: '100%', borderRadius: 3, width: `${pct}%`, background: expired ? 'var(--border)' : color, transition: 'width 0.3s' }} />
+        </div>
+      </div>
+    )
+  }
+
   async function togglePaid(payment) {
     const paid = !payment.paid
     await supabase.from('payments').update({
@@ -307,7 +347,56 @@ export default function ClientTab({ client }) {
       {/* Divider */}
       <div style={{ borderTop: '1px solid var(--border-light)', marginBottom: 16 }} />
 
-      {/* ── Onboarding ── */}
+      {/* ── Delivery & Support ── */}
+      {deal && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
+            Delivery & Support
+          </div>
+
+          {/* Product sold */}
+          {deal.product_sold && (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+              Product: <span style={{ fontWeight: 600, color: 'var(--text)' }}>{deal.product_sold}</span>
+            </div>
+          )}
+
+          {/* Delivery toggle */}
+          {!deal.delivery_status ? (
+            <button
+              onClick={markDelivered}
+              style={{
+                width: '100%', padding: '10px 0', borderRadius: 8, border: '1.5px dashed var(--border)',
+                background: 'var(--bg-light)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                color: 'var(--text-muted)', marginBottom: 12
+              }}
+            >
+              ✓ Mark as Delivered
+            </button>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, padding: '8px 12px', borderRadius: 8, background: 'var(--success-bg)', border: '1px solid var(--success)' }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--success)' }}>✓ Delivered</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  {deal.delivered_at ? new Date(deal.delivered_at + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                </div>
+              </div>
+              <button onClick={unmarkDelivered} style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Undo</button>
+            </div>
+          )}
+
+          {/* Countdowns — only show after delivery */}
+          {deal.delivery_status && deal.delivered_at && (
+            <div>
+              <CountdownBar label="🔧 Changes window" fromDate={deal.delivered_at} totalDays={30} color="#f59e0b" />
+              <CountdownBar label="💬 Support window" fromDate={deal.delivered_at} totalDays={90} color="#6366f1" />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Divider */}
+      <div style={{ borderTop: '1px solid var(--border-light)', marginBottom: 16 }} />
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>

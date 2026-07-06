@@ -52,7 +52,16 @@ export default function App() {
   // Payment prompt — shown when a lead moves to Active, collects deal value
   // + received + pending before creating any records. Never auto-creates.
   const [paymentPrompt, setPaymentPrompt] = useState(null) // { client } | null
-  const [paymentForm, setPaymentForm] = useState({ deal_value: '', received: '', pending: '', received_label: 'Advance', pending_label: 'Final payment' })
+  const [dealStep, setDealStep] = useState(1) // 1=product, 2=payment terms, 3=confirm
+  const [dealForm, setDealForm] = useState({
+    product_sold: '',
+    deal_value: '',
+    payment_terms: '', // '50_50' | '100_0'
+    advance_amount: '',
+    advance_label: 'Advance',
+    final_amount: '',
+    final_label: 'On delivery',
+  })
 
   // Offline sync — currently scoped to logging a contact and marking a
   // task done, the two actions most likely to happen with no signal.
@@ -500,34 +509,42 @@ export default function App() {
       received_label: 'Advance',
       pending_label: 'Final payment',
     })
+    setDealStep(1)
+    setDealForm({ product_sold: '', deal_value: '', payment_terms: '', advance_amount: '', advance_label: 'Advance', final_amount: '', final_label: 'On delivery' })
     setPaymentPrompt({ client })
   }
 
-  async function submitPaymentPrompt() {
+  async function submitDealWizard() {
     const { client } = paymentPrompt
-    const dealValue = Number(paymentForm.deal_value) || 0
-    const received  = Number(paymentForm.received)  || 0
-    const pending   = Number(paymentForm.pending)   || 0
+    const dealValue = Number(dealForm.deal_value) || 0
     const today = new Date().toISOString().slice(0, 10)
     const addDays = (d, n) => { const dt = new Date(d); dt.setDate(dt.getDate() + n); return dt.toISOString().slice(0, 10) }
 
-    // Check if deal already exists (e.g. re-triggering after a bug)
     const { data: existing } = await supabase.from('deals').select('id').eq('client_id', client.id).maybeSingle()
     if (existing) { setPaymentPrompt(null); return }
 
     const { data: deal, error } = await supabase.from('deals').insert({
-      client_id: client.id, deal_value: dealValue,
-      payment_type: 'milestone', subscription_type: 'one_time',
+      client_id: client.id,
+      deal_value: dealValue,
+      product_sold: dealForm.product_sold.trim() || null,
+      payment_type: 'milestone',
+      subscription_type: 'one_time',
       subscription_start: today,
+      delivery_status: false,
     }).select().single()
     if (error || !deal) { setError('Failed to create deal: ' + error?.message); return }
 
     const rows = []
-    if (received > 0) rows.push({ deal_id: deal.id, label: paymentForm.received_label, amount: received, due_date: today, paid: true, paid_at: today })
-    if (pending > 0)  rows.push({ deal_id: deal.id, label: paymentForm.pending_label,  amount: pending,  due_date: addDays(today, 30), paid: false })
+    if (dealForm.payment_terms === '100_0') {
+      rows.push({ deal_id: deal.id, label: 'Full payment', amount: dealValue, due_date: today, paid: true, paid_at: today })
+    } else {
+      const adv = Number(dealForm.advance_amount) || 0
+      const fin = Number(dealForm.final_amount) || 0
+      if (adv > 0) rows.push({ deal_id: deal.id, label: dealForm.advance_label, amount: adv, due_date: today, paid: true, paid_at: today })
+      if (fin > 0) rows.push({ deal_id: deal.id, label: dealForm.final_label, amount: fin, due_date: addDays(today, 30), paid: false })
+    }
     if (rows.length > 0) await supabase.from('payments').insert(rows)
 
-    // Auto-create onboarding steps
     const STEPS = ['Onboarding call','Setup & data migration','Training session','Go-live','Client handoff']
     await supabase.from('onboarding_steps').insert(
       STEPS.map((label, i) => ({ client_id: client.id, step_order: i, step_label: label, due_date: addDays(today, i * 7) }))
@@ -799,69 +816,147 @@ export default function App() {
       {/* Payment prompt — shown when a lead moves to Active, always, never skipped */}
       {paymentPrompt && (
         <div className="modal-overlay" onClick={() => {}}>
-          <div className="modal-box" style={{ maxWidth: 400, padding: 24 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4, color: 'var(--text-dark)' }}>
-              🎉 Deal closed — {paymentPrompt.client.name}
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
-              Enter the payment details. You can edit these anytime in the Client tab.
-            </div>
-            <div className="field" style={{ marginBottom: 12 }}>
-              <label>Total deal value (₹)</label>
-              <input
-                type="number"
-                value={paymentForm.deal_value}
-                onChange={e => setPaymentForm(p => ({ ...p, deal_value: e.target.value }))}
-                placeholder="e.g. 21999"
-                autoFocus
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <div className="field" style={{ flex: 1 }}>
-                <label>Amount received (₹)</label>
-                <input
-                  type="number"
-                  value={paymentForm.received}
-                  onChange={e => setPaymentForm(p => ({ ...p, received: e.target.value }))}
-                  placeholder="e.g. 10999"
-                />
+          <div className="modal-box" style={{ maxWidth: 420, padding: 28 }}>
+
+            {/* Header */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
+                Deal Closed
               </div>
-              <div className="field" style={{ flex: 1 }}>
-                <label>Label</label>
-                <input
-                  value={paymentForm.received_label}
-                  onChange={e => setPaymentForm(p => ({ ...p, received_label: e.target.value }))}
-                  placeholder="Advance"
-                />
+              <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>
+                {paymentPrompt.client.name}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                {paymentPrompt.client.company}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-              <div className="field" style={{ flex: 1 }}>
-                <label>Amount pending (₹)</label>
-                <input
-                  type="number"
-                  value={paymentForm.pending}
-                  onChange={e => setPaymentForm(p => ({ ...p, pending: e.target.value }))}
-                  placeholder="e.g. 11000"
-                />
-              </div>
-              <div className="field" style={{ flex: 1 }}>
-                <label>Label</label>
-                <input
-                  value={paymentForm.pending_label}
-                  onChange={e => setPaymentForm(p => ({ ...p, pending_label: e.target.value }))}
-                  placeholder="Final payment"
-                />
-              </div>
+
+            {/* Step indicators */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 24 }}>
+              {['Product', 'Payment', 'Confirm'].map((label, i) => (
+                <div key={i} style={{ flex: 1, textAlign: 'center' }}>
+                  <div style={{
+                    height: 3, borderRadius: 2, marginBottom: 4,
+                    background: dealStep > i ? 'var(--primary)' : dealStep === i + 1 ? 'var(--primary)' : 'var(--border)'
+                  }} />
+                  <span style={{ fontSize: 10, fontWeight: 600, color: dealStep === i + 1 ? 'var(--primary)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    {label}
+                  </span>
+                </div>
+              ))}
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-primary" style={{ flex: 1 }} onClick={submitPaymentPrompt}>
-                Save & continue
-              </button>
-              <button className="btn btn-secondary" onClick={() => setPaymentPrompt(null)}>
-                Skip for now
-              </button>
-            </div>
+
+            {/* Step 1 — Product */}
+            {dealStep === 1 && (
+              <div>
+                <div className="field" style={{ marginBottom: 14 }}>
+                  <label>What was sold?</label>
+                  <input
+                    autoFocus
+                    value={dealForm.product_sold}
+                    onChange={e => setDealForm(p => ({ ...p, product_sold: e.target.value }))}
+                    placeholder="e.g. CRM Software, Leads Sheet..."
+                  />
+                </div>
+                <div className="field" style={{ marginBottom: 20 }}>
+                  <label>Deal value (₹)</label>
+                  <input
+                    type="number"
+                    value={dealForm.deal_value}
+                    onChange={e => setDealForm(p => ({ ...p, deal_value: e.target.value }))}
+                    placeholder="e.g. 21999"
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-primary" style={{ flex: 1 }}
+                    disabled={!dealForm.product_sold.trim() || !dealForm.deal_value}
+                    onClick={() => setDealStep(2)}>
+                    Next →
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => setPaymentPrompt(null)}>Skip</button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2 — Payment terms */}
+            {dealStep === 2 && (
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--text)' }}>Payment terms</div>
+                <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+                  {[
+                    { key: '50_50', label: '50 / 50', sub: 'Advance + on delivery' },
+                    { key: '100_0', label: '100%', sub: 'Full payment upfront' },
+                  ].map(opt => (
+                    <button key={opt.key} onClick={() => setDealForm(p => ({
+                      ...p,
+                      payment_terms: opt.key,
+                      advance_amount: opt.key === '50_50' ? String(Math.round(Number(p.deal_value) / 2)) : '',
+                      final_amount: opt.key === '50_50' ? String(Math.round(Number(p.deal_value) / 2)) : '',
+                    }))}
+                      style={{
+                        flex: 1, padding: '14px 10px', borderRadius: 10, cursor: 'pointer',
+                        border: '2px solid', textAlign: 'center',
+                        borderColor: dealForm.payment_terms === opt.key ? 'var(--primary)' : 'var(--border)',
+                        background: dealForm.payment_terms === opt.key ? 'rgba(var(--primary-rgb,180,90,40),0.06)' : 'var(--bg-white)',
+                      }}>
+                      <div style={{ fontWeight: 700, fontSize: 16, color: dealForm.payment_terms === opt.key ? 'var(--primary)' : 'var(--text)' }}>{opt.label}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{opt.sub}</div>
+                    </button>
+                  ))}
+                </div>
+
+                {dealForm.payment_terms === '50_50' && (
+                  <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+                    <div className="field" style={{ flex: 1 }}>
+                      <label>Advance (₹)</label>
+                      <input type="number" value={dealForm.advance_amount}
+                        onChange={e => setDealForm(p => ({ ...p, advance_amount: e.target.value }))} />
+                    </div>
+                    <div className="field" style={{ flex: 1 }}>
+                      <label>On delivery (₹)</label>
+                      <input type="number" value={dealForm.final_amount}
+                        onChange={e => setDealForm(p => ({ ...p, final_amount: e.target.value }))} />
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-secondary" onClick={() => setDealStep(1)}>← Back</button>
+                  <button className="btn btn-primary" style={{ flex: 1 }}
+                    disabled={!dealForm.payment_terms}
+                    onClick={() => setDealStep(3)}>
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3 — Confirm */}
+            {dealStep === 3 && (
+              <div>
+                <div style={{ background: 'var(--bg-light)', borderRadius: 10, padding: '14px 16px', marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {[
+                    { label: 'Product', value: dealForm.product_sold },
+                    { label: 'Deal value', value: `₹${Number(dealForm.deal_value).toLocaleString('en-IN')}` },
+                    { label: 'Payment', value: dealForm.payment_terms === '100_0'
+                        ? 'Full payment upfront'
+                        : `₹${Number(dealForm.advance_amount).toLocaleString('en-IN')} advance + ₹${Number(dealForm.final_amount).toLocaleString('en-IN')} on delivery` },
+                  ].map(row => (
+                    <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>{row.label}</span>
+                      <span style={{ fontWeight: 600 }}>{row.value}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-secondary" onClick={() => setDealStep(2)}>← Back</button>
+                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={submitDealWizard}>
+                    Confirm & Save
+                  </button>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       )}

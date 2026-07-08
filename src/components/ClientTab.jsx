@@ -36,6 +36,7 @@ export default function ClientTab({ client }) {
   const [saving, setSaving]           = useState(false)
   const [editingDeal, setEditingDeal] = useState(false)
   const [dealForm, setDealForm]       = useState(null)
+  const [paymentDrafts, setPaymentDrafts] = useState({}) // { [id_field]: draftValue }
 
   useEffect(() => {
     loadAll()
@@ -168,9 +169,24 @@ export default function ClientTab({ client }) {
   }
 
   async function updatePayment(id, field, value) {
-    const updated = { [field]: value }
-    await supabase.from('payments').update(updated).eq('id', id)
+    const updated = { [field]: field === 'amount' ? Number(value) : value }
     setPayments(prev => prev.map(p => p.id === id ? { ...p, ...updated } : p))
+    await supabase.from('payments').update(updated).eq('id', id)
+  }
+
+  function paymentDraftKey(id, field) { return `${id}_${field}` }
+
+  function getPaymentDraft(id, field, fallback) {
+    const k = paymentDraftKey(id, field)
+    return paymentDrafts[k] !== undefined ? paymentDrafts[k] : fallback
+  }
+
+  function setPaymentDraft(id, field, value) {
+    setPaymentDrafts(prev => ({ ...prev, [paymentDraftKey(id, field)]: value }))
+  }
+
+  function clearPaymentDraft(id, field) {
+    setPaymentDrafts(prev => { const n = { ...prev }; delete n[paymentDraftKey(id, field)]; return n })
   }
 
   async function deletePayment(id) {
@@ -315,20 +331,23 @@ export default function ClientTab({ client }) {
                   {p.paid && <span style={{ color: '#fff', fontSize: 10, lineHeight: 1 }}>✓</span>}
                 </button>
                 <input
-                  value={p.label}
-                  onChange={e => updatePayment(p.id, 'label', e.target.value)}
+                  value={getPaymentDraft(p.id, 'label', p.label)}
+                  onChange={e => setPaymentDraft(p.id, 'label', e.target.value)}
+                  onBlur={e => { updatePayment(p.id, 'label', e.target.value); clearPaymentDraft(p.id, 'label') }}
                   style={{ flex: 1, fontSize: 12, border: 'none', background: 'transparent', fontFamily: 'var(--font)', fontWeight: 500, color: 'var(--text-dark)' }}
                 />
                 <input
                   type="number"
-                  value={p.amount}
-                  onChange={e => updatePayment(p.id, 'amount', Number(e.target.value))}
+                  value={getPaymentDraft(p.id, 'amount', p.amount)}
+                  onChange={e => setPaymentDraft(p.id, 'amount', e.target.value)}
+                  onBlur={e => { updatePayment(p.id, 'amount', e.target.value); clearPaymentDraft(p.id, 'amount') }}
                   style={{ width: 70, fontSize: 12, textAlign: 'right', border: 'none', background: 'transparent', fontFamily: 'var(--font)', fontWeight: 700, color: p.paid ? 'var(--success)' : 'var(--text-dark)' }}
                 />
                 <input
                   type="date"
-                  value={p.due_date || ''}
-                  onChange={e => updatePayment(p.id, 'due_date', e.target.value)}
+                  value={getPaymentDraft(p.id, 'due_date', p.due_date || '')}
+                  onChange={e => setPaymentDraft(p.id, 'due_date', e.target.value)}
+                  onBlur={e => { updatePayment(p.id, 'due_date', e.target.value); clearPaymentDraft(p.id, 'due_date') }}
                   style={{ fontSize: 11, border: 'none', background: 'transparent', color: 'var(--text-muted)', fontFamily: 'var(--font)' }}
                 />
                 <button onClick={() => deletePayment(p.id)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, padding: '0 2px' }} title="Remove">×</button>

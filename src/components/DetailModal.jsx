@@ -197,10 +197,9 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
 
   // Unified save: saves contact fields + log entry (if What happened has text)
   const handleSave = useCallback(async () => {
-    let fieldSaveFailed = false
     const hasLog = logWhatHappened.trim().length > 0
 
-    // Build postLog updates upfront
+    // Optimistic local updates — applied immediately so UI reflects changes
     const postUpdates = {}
     if (hasLog) {
       postUpdates.last_contacted_at = new Date().toISOString()
@@ -209,38 +208,18 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
       if (logDue && logTime) postUpdates.next_action_time = logTime
       else if (logDue && !logTime) postUpdates.next_action_time = null
       if (form.stage === 'lead') postUpdates.stage = 'contacted'
-    }
-
-    // Apply all optimistic local state updates immediately
-    if (hasLog && Object.keys(postUpdates).length > 0) {
       setForm(f => ({ ...f, ...postUpdates }))
-      onPostLogUpdate(client.id, postUpdates) // fire-and-forget
+      onPostLogUpdate(client.id, postUpdates)
     }
 
-    // Close the modal instantly — user doesn't wait for any DB round trip
+    // Run field save + log insert in parallel, THEN close
+    // (closing before writes complete causes parent refetch to stomp the data)
+    const tasks = []
+    if (isDirty) tasks.push(onSave({ ...form }).catch(() => {}))
+    if (hasLog) tasks.push(onLogContact(client.id, logMethod, logWhatHappened.trim(), logWhatNext.trim() || null, logProgress))
+    if (tasks.length > 0) await Promise.all(tasks)
+
     onClose()
-
-    // Fire all DB writes in the background after modal is gone
-    const bgTasks = []
-    if (isDirty) {
-      bgTasks.push(onSave({ ...form }).catch(() => { fieldSaveFailed = true }))
-    }
-    if (hasLog) {
-      bgTasks.push(
-        onLogContact(client.id, logMethod, logWhatHappened.trim(), logWhatNext.trim() || null, logProgress)
-      )
-    }
-    await Promise.all(bgTasks)
-    if (hasLog) {
-      postUpdates.last_contacted_at = new Date().toISOString()
-      if (logWhatNext.trim()) postUpdates.next_action = logWhatNext.trim()
-      if (logDue) postUpdates.next_action_due = logDue
-      if (logDue && logTime) postUpdates.next_action_time = logTime
-      else if (logDue && !logTime) postUpdates.next_action_time = null
-      if (form.stage === 'lead') postUpdates.stage = 'contacted'
-    }
-
-    // done — modal already closed above
   }, [form, isDirty, logWhatHappened, logWhatNext, logDue, logTime, logMethod, logProgress, onSave, onPostLogUpdate, onLogContact, onClose, client])
 
   useEffect(() => {

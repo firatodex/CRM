@@ -199,7 +199,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
   const handleSave = useCallback(async () => {
     const hasLog = logWhatHappened.trim().length > 0
 
-    // Optimistic local updates — applied immediately so UI reflects changes
+    // Build post-log field updates
     const postUpdates = {}
     if (hasLog) {
       postUpdates.last_contacted_at = new Date().toISOString()
@@ -208,16 +208,35 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
       if (logDue && logTime) postUpdates.next_action_time = logTime
       else if (logDue && !logTime) postUpdates.next_action_time = null
       if (form.stage === 'lead') postUpdates.stage = 'contacted'
-      setForm(f => ({ ...f, ...postUpdates }))
-      onPostLogUpdate(client.id, postUpdates)
     }
 
-    // Run field save + log insert in parallel, THEN close
-    // (closing before writes complete causes parent refetch to stomp the data)
+    // Merge postUpdates into form so onSave writes everything in ONE DB call.
+    // This eliminates the race condition where two separate writes to the same
+    // clients row would stomp each other depending on which lands last.
+    const mergedForm = hasLog ? { ...form, ...postUpdates } : { ...form }
+
+    // Apply optimistic local update immediately
+    if (hasLog) setForm(f => ({ ...f, ...postUpdates }))
+
+    // Run field save + log insert in parallel
+    // Field save carries postUpdates merged in so there's only ONE clients write.
     const tasks = []
-    if (isDirty) tasks.push(onSave({ ...form }).catch(() => {}))
+    if (isDirty || hasLog) tasks.push(onSave(mergedForm))
     if (hasLog) tasks.push(onLogContact(client.id, logMethod, logWhatHappened.trim(), logWhatNext.trim() || null, logProgress))
-    if (tasks.length > 0) await Promise.all(tasks)
+
+    try {
+      await Promise.all(tasks)
+    } catch (err) {
+      // Surface any error rather than silently dropping it
+      console.error('Save failed:', err)
+    }
+
+    // Notify parent of post-log updates so it can update local state
+    // (stage flip, next action, last_contacted_at) — done AFTER the DB
+    // write so the parent refetch doesn't stomp our changes.
+    if (hasLog && Object.keys(postUpdates).length > 0) {
+      onPostLogUpdate(client.id, postUpdates)
+    }
 
     onClose()
   }, [form, isDirty, logWhatHappened, logWhatNext, logDue, logTime, logMethod, logProgress, onSave, onPostLogUpdate, onLogContact, onClose, client])

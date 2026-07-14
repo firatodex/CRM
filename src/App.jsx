@@ -279,30 +279,15 @@ export default function App() {
   }
 
   async function handlePostLogUpdate(clientId, updates) {
-    // Optimistic local update happens immediately either way
+    // DB write for these fields is now handled by handleSave (merged form).
+    // This function only needs to update local state so the pipeline card
+    // reflects the new stage/next action immediately.
     setClients(prev => prev.map(c => c.id === clientId ? { ...c, ...updates } : c))
     if (updates.stage === 'dead' || updates.stage === 'active') {
-      // Mirrors the DB trigger locally so the UI doesn't show a stale
-      // Final Step entry until the next fetch.
       setFinalStepIds(prev => prev.filter(id => id !== clientId))
     }
     if (updates.stage === 'dead') {
-      // DB trigger hard-deletes open tasks for dead leads — mirror locally too.
       setTasks(prev => prev.filter(t => t.client_id !== clientId))
-    }
-
-    if (!navigator.onLine) {
-      await queueAction('post_log_update', { clientId, updates })
-      return
-    }
-    try {
-      await performPostLogUpdate({ clientId, updates })
-    } catch (err) {
-      if (!navigator.onLine || err?.message?.toLowerCase().includes('fetch')) {
-        await queueAction('post_log_update', { clientId, updates })
-      } else {
-        setError(`Log saved, but failed to update the lead's stage/next action: ${err.message}`)
-      }
     }
   }
 
@@ -391,27 +376,26 @@ export default function App() {
       discovery_decision_maker: form.discovery_decision_maker || null,
       discovery_switch_openness: form.discovery_switch_openness || null,
       discovery_completed_at: form.discovery_completed_at || null,
+      // Include post-log fields that may be merged in from DetailModal
+      last_contacted_at: form.last_contacted_at || null,
     }
-    // Record won_at and the stage it converted FROM only on the actual
-    // transition to Active — not on every subsequent edit to an already-won
-    // lead. won_from_stage feeds the ratio-weighted depletion on the
-    // pipeline reserve gauge (e.g. a Proposal->Won uses the Proposal-specific
-    // conversion rate, not a blended one).
     const previousClient = clients.find(c => c.id === form.id)
     if (form.stage === 'active' && previousClient?.stage !== 'active') {
       payload.won_at = new Date().toISOString()
       payload.won_from_stage = previousClient?.stage || null
     }
-    const { data, error } = await supabase
-      .from('clients').update(payload).eq('id', form.id).select().single()
-    setSaving(false)
-    if (error) { setError(error.message); throw error }
-    if (data) {
-      setClients(prev => prev.map(c => c.id === data.id ? data : c))
-      // Auto-create deal + onboarding when a lead first moves to active
-      if (form.stage === 'active' && previousClient?.stage !== 'active') {
-        promptForPayment(data)
+    try {
+      const { data, error } = await supabase
+        .from('clients').update(payload).eq('id', form.id).select().single()
+      if (error) { setError(error.message); throw error }
+      if (data) {
+        setClients(prev => prev.map(c => c.id === data.id ? data : c))
+        if (form.stage === 'active' && previousClient?.stage !== 'active') {
+          promptForPayment(data)
+        }
       }
+    } finally {
+      setSaving(false)
     }
   }
 

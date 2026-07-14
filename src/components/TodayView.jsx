@@ -7,25 +7,40 @@ import { todayStr } from '../utils'
 function priorityScore(client) {
   const today = todayStr()
   let score = 0
-  if (client.temperature === 'hot')  score += 30
-  if (client.temperature === 'warm') score += 15
+
+  // --- Urgency (primary) ---
   if (client.next_action_due) {
     const diff = Math.round(
       (new Date(client.next_action_due + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000
     )
-    if (diff < 0)   score += 50 + Math.abs(diff) * 2
-    if (diff === 0) score += 40
+    if (diff < 0) {
+      // Overdue — higher score the more overdue
+      score += 10000 + Math.abs(diff) * 100
+    } else if (diff === 0) {
+      // Due today — with or without a specific time
+      if (client.next_action_time) {
+        // Convert HH:MM to minutes-since-midnight, earlier = more urgent
+        const [hh, mm] = client.next_action_time.split(':').map(Number)
+        const minutesSinceMidnight = hh * 60 + mm
+        // Earlier time = higher score (1440 mins in a day, subtract to invert)
+        score += 5000 + (1440 - minutesSinceMidnight)
+      } else {
+        // Due today, no specific time — below timed slots
+        score += 3000
+      }
+    }
   }
+
+  // --- Temperature (secondary — breaks ties within same urgency) ---
+  if (client.temperature === 'hot')  score += 200
+  if (client.temperature === 'warm') score += 100
+
+  // --- Revenue (tertiary — breaks ties within same urgency + temperature) ---
   const rev = Number(client.potential_revenue) || 0
-  if (rev > 100000) score += 15
+  if (rev > 100000)     score += 15
   else if (rev > 50000) score += 8
-  else if (rev > 0) score += 3
-  if (!client.last_contacted_at) score += 10
-  else {
-    const daysSince = Math.floor((Date.now() - new Date(client.last_contacted_at)) / 86400000)
-    if (daysSince > 14) score += 12
-    else if (daysSince > 7) score += 6
-  }
+  else if (rev > 0)     score += 3
+
   return score
 }
 

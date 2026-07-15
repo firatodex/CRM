@@ -8,38 +8,37 @@ function priorityScore(client) {
   const today = todayStr()
   let score = 0
 
-  // --- Urgency (primary) ---
   if (client.next_action_due) {
     const diff = Math.round(
       (new Date(client.next_action_due + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000
     )
+
     if (diff < 0) {
-      // Overdue — higher score the more overdue
-      score += 10000 + Math.abs(diff) * 100
-    } else if (diff === 0) {
-      // Due today — with or without a specific time
+      // Overdue — base 10,000,000, most overdue first, then by time
+      const dayScore = 10000000 + Math.abs(diff) * 10000
       if (client.next_action_time) {
-        // Convert HH:MM to minutes-since-midnight, earlier = more urgent
         const [hh, mm] = client.next_action_time.split(':').map(Number)
-        const minutesSinceMidnight = hh * 60 + mm
-        // Earlier time = higher score (1440 mins in a day, subtract to invert)
-        score += 5000 + (1440 - minutesSinceMidnight)
+        score = dayScore + (1440 - (hh * 60 + mm)) * 5
       } else {
-        // Due today, no specific time — below timed slots
-        score += 3000
+        score = dayScore
+      }
+    } else if (diff === 0) {
+      // Due today with time — time is king, 1,000,000 base
+      if (client.next_action_time) {
+        const [hh, mm] = client.next_action_time.split(':').map(Number)
+        // Earlier time = higher score. 1440 mins max, multiply by 5 to leave room for temp
+        score = 1000000 + (1440 - (hh * 60 + mm)) * 5
+      } else {
+        // Due today, no time — below all timed slots
+        score = 500000
       }
     }
   }
 
-  // --- Temperature (secondary — breaks ties within same urgency) ---
-  if (client.temperature === 'hot')  score += 200
-  if (client.temperature === 'warm') score += 100
-
-  // --- Revenue (tertiary — breaks ties within same urgency + temperature) ---
-  const rev = Number(client.potential_revenue) || 0
-  if (rev > 100000)     score += 15
-  else if (rev > 50000) score += 8
-  else if (rev > 0)     score += 3
+  // Temperature: only breaks ties within exact same time slot
+  // Max spread = 2, so it never overrides a 1-min time difference (gap of 5)
+  if (client.temperature === 'hot')  score += 2
+  if (client.temperature === 'warm') score += 1
 
   return score
 }

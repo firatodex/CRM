@@ -186,17 +186,36 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
     // table) is computed live, so it updates immediately as you work leads
     // or close deals — but the moment today ends and tomorrow's snapshot
     // gets written, today's number freezes too, permanently.
+
+    // Build a map of won_at dates from clients — used to fill in win dots
+    // that the snapshot cron may have missed (e.g. deal closed after 2am,
+    // or manually backfilled with a historical won_at date).
+    const wonByDate = {}
+    clients.forEach(c => {
+      if (c.won_at && c.stage === 'active') {
+        const d = c.won_at.slice(0, 10)
+        if (d !== today) wonByDate[d] = (wonByDate[d] || 0) + 1
+      }
+    })
+
     const frozen = pipelineSnapshots
       .filter(s => s.snapshot_date !== today) // exclude today even if a stale row exists
       .sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date))
-      .map(s => ({
-        date: s.snapshot_date,
-        label: new Date(s.snapshot_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-        reserve: s.points,
-        proposals: s.proposal_count,
-        wins: s.wins_today > 0 ? s.wins_today : null,
-        pointsRemoved: s.win_points_removed > 0 ? s.win_points_removed : null,
-      }))
+      .map(s => {
+        // Use whichever is larger: the snapshot's recorded wins, or the
+        // actual count from clients.won_at for that date.
+        const snapshotWins = s.wins_today || 0
+        const clientWins = wonByDate[s.snapshot_date] || 0
+        const wins = Math.max(snapshotWins, clientWins)
+        return {
+          date: s.snapshot_date,
+          label: new Date(s.snapshot_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+          reserve: s.points,
+          proposals: s.proposal_count,
+          wins: wins > 0 ? wins : null,
+          pointsRemoved: s.win_points_removed > 0 ? s.win_points_removed : null,
+        }
+      })
 
     // Today: computed live, mirroring the exact same formula used for the
     // frozen historical snapshots, so today's number is consistent with

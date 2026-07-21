@@ -108,14 +108,21 @@ export default function App() {
     if (existing) return // already recorded today — append-only, never overwritten
 
     const CONTACTED_WEIGHT = 1
-    // Flat 24-point deduction per win (roughly 3 proposals' worth, since
-    // about 1 in 3 proposals converts) — a deliberately simple, explainable
-    // number for now, to be redesigned with a concrete formula once more
-    // win data exists to support a more precise one.
     const WIN_DEDUCTION = 24
+    const PROPOSAL_EXPIRY_DAYS = 30
 
     const contactedCount = clients.filter(c => c.stage === 'contacted').length
-    const proposalCount = clients.filter(c => c.stage === 'proposal').length
+
+    // Only count proposals sent within the last 30 days — expired ones are
+    // unlikely to convert and inflate the reserve gauge misleadingly.
+    // Falls back to updated_at for proposals without a proposal_sent_at date.
+    const proposalCount = clients.filter(c => {
+      if (c.stage !== 'proposal') return false
+      const sentAt = c.proposal_sent_at || c.updated_at
+      if (!sentAt) return true // no date info, include it
+      const daysSinceSent = (Date.now() - new Date(sentAt).getTime()) / (1000 * 60 * 60 * 24)
+      return daysSinceSent <= PROPOSAL_EXPIRY_DAYS
+    }).length
 
     const wonToday = clients.filter(c => c.won_at && c.won_at.slice(0, 10) === today)
     const winPointsRemoved = wonToday.length * WIN_DEDUCTION
@@ -378,6 +385,7 @@ export default function App() {
       discovery_completed_at: form.discovery_completed_at || null,
       // Include post-log fields that may be merged in from DetailModal
       last_contacted_at: form.last_contacted_at || null,
+      proposal_sent_at: form.proposal_sent_at || null,
     }
     const previousClient = clients.find(c => c.id === form.id)
     if (form.stage === 'active' && previousClient?.stage !== 'active') {

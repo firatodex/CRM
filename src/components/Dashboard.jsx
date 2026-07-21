@@ -225,8 +225,17 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
     // for now; to be redesigned with a more precise formula once enough
     // win data exists to support one.
     const WIN_DEDUCTION = 24
+    const CONTACTED_W = 1
+    const PROPOSAL_EXPIRY_DAYS = 30
+
     const liveContactedCount = clients.filter(c => c.stage === 'contacted').length
-    const liveProposalCount = clients.filter(c => c.stage === 'proposal').length
+    const liveProposalCount = clients.filter(c => {
+      if (c.stage !== 'proposal') return false
+      const sentAt = c.proposal_sent_at || c.updated_at
+      if (!sentAt) return true
+      const daysSinceSent = (Date.now() - new Date(sentAt).getTime()) / (1000 * 60 * 60 * 24)
+      return daysSinceSent <= PROPOSAL_EXPIRY_DAYS
+    }).length
     const wonTodayList = clients.filter(c => c.won_at && c.won_at.slice(0, 10) === today)
     const wonTodayPoints = wonTodayList.length * WIN_DEDUCTION
 

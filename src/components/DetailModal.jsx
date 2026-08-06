@@ -489,6 +489,20 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
             {/* Tab bar */}
             {(() => {
               const tabs = ['Log', 'History', 'Discovery', ...(client.stage === 'active' ? ['Client'] : [])]
+              
+              // Calculate discovery completion status
+              const discoveryFields = [
+                form.discovery_team_size,
+                form.discovery_monthly_leads,
+                form.discovery_current_tool,
+                form.discovery_lost_deals,
+                form.discovery_decision_maker,
+                form.discovery_switch_openness,
+              ]
+              const filledCount = discoveryFields.filter(f => f).length
+              const isFullyFilled = filledCount === 6
+              const isPartiallyFilled = filledCount > 0 && filledCount < 6
+              
               return (
                 <div style={{ display: 'flex', gap: 2, marginBottom: 12, background: 'var(--bg-light)', borderRadius: 8, padding: 3, flexShrink: 0 }}>
                   {tabs.map(tab => (
@@ -504,7 +518,16 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                         transition: 'all 0.15s',
                       }}
                     >
-                      {tab === 'Discovery' ? '📋 Discovery' : tab}
+                      {tab === 'Discovery' ? (
+                        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                          📋 Discovery
+                          {isFullyFilled ? (
+                            <span style={{ color: '#16a34a', fontWeight: 700, fontSize: 13 }}>✓</span>
+                          ) : isPartiallyFilled ? (
+                            <span style={{ color: '#3b82f6', fontWeight: 700, fontSize: 13 }}>◐</span>
+                          ) : null}
+                        </span>
+                      ) : tab}
                       {tab === 'History' && contactLogs.length > 0 && (
                         <span style={{
                           marginLeft: 4, fontSize: 10, background: 'var(--border-light)',

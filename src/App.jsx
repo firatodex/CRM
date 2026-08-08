@@ -732,7 +732,7 @@ export default function App() {
             onDrop={handleDrop}
           />
         ) : view === 'dashboard' ? (
-          <DashboardRedesign clients={clients} contactLogs={contactLogs} deals={deals} payments={payments} />
+          <DashboardRedesign clients={clients} contactLogs={contactLogs} deals={deals} payments={payments} pipelineSnapshots={pipelineSnapshots} />
         ) : view === 'active' ? (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             <div className="clients-subtabs">

@@ -213,62 +213,106 @@ function RevenueRealization({ deals }) {
 
   const data = Object.entries(monthlyData).map(([month, stats]) => ({
     month,
-    revenue: stats.revenue,
+    revenue: Math.round(stats.revenue / 1000), // in thousands for readability
     dealCount: stats.dealCount,
     avgDeal: stats.avgDeal,
   }))
 
-  const totalRevenue = data.reduce((s, d) => s + d.revenue, 0)
+  const totalRevenue = data.reduce((s, d) => s + d.revenue, 0) * 1000
   const avgMonthly = Math.round(totalRevenue / data.length)
+  const latestMonth = data[data.length - 1]
+  const prevMonth = data[data.length - 2]
+  const monthOverMonthChange = prevMonth && prevMonth.revenue > 0 
+    ? Math.round(((latestMonth.revenue - prevMonth.revenue) / prevMonth.revenue) * 100)
+    : 0
 
   return (
     <div className="dash-card">
-      <div className="dash-card-title">Revenue Realization — 6 Months</div>
+      <div className="dash-card-title">Revenue Realization — Business Scaling</div>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-        Actual deals booked by month — is the business scaling?
+        6-month revenue trend (orange) vs deal volume (blue) — is the business actually growing?
       </div>
 
       {data.length === 0 ? (
         <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-muted)' }}>No deals yet</div>
       ) : (
         <>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={data} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={220}>
+            <ComposedChart data={data} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
               <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
-              <YAxis yAxisId="left" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: '#5E8FC0' }} />
+              <YAxis yAxisId="revenue" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} label={{ value: '₹K', angle: -90, position: 'insideLeft', offset: 5 }} />
+              <YAxis yAxisId="deals" orientation="right" tick={{ fontSize: 10, fill: '#5E8FC0' }} label={{ value: 'Deals', angle: 90, position: 'insideRight', offset: -5 }} />
               <Tooltip
                 contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border-light)' }}
                 formatter={(v, name) => {
-                  if (name === 'revenue') return [formatCurrency(v), 'Revenue']
-                  if (name === 'dealCount') return [v, 'Deals']
+                  if (name === 'revenue') return [formatCurrency(v * 1000), 'Revenue']
+                  if (name === 'dealCount') return [v, 'Deals won']
+                  if (name === 'avgDeal') return [formatCurrency(v), 'Avg deal size']
                   return [v, name]
                 }}
               />
-              <Bar yAxisId="left" dataKey="revenue" fill="var(--primary)" radius={[8, 8, 0, 0]} />
-              <Line yAxisId="right" type="monotone" dataKey="dealCount" stroke="#5E8FC0" strokeWidth={2} dot={{ fill: '#5E8FC0', r: 4 }} />
-            </BarChart>
+              {/* Revenue line — orange, left axis */}
+              <Line 
+                yAxisId="revenue"
+                type="monotone" 
+                dataKey="revenue" 
+                stroke="var(--primary)" 
+                strokeWidth={2.5} 
+                dot={{ fill: 'var(--primary)', r: 5 }}
+                name="revenue"
+              />
+              {/* Deal count line — blue, right axis */}
+              <Line 
+                yAxisId="deals"
+                type="monotone" 
+                dataKey="dealCount" 
+                stroke="#5E8FC0" 
+                strokeWidth={2.5} 
+                dot={{ fill: '#5E8FC0', r: 5 }}
+                name="dealCount"
+                strokeDasharray="4 2"
+              />
+            </ComposedChart>
           </ResponsiveContainer>
 
-          <div style={{ display: 'flex', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginTop: 16 }}>
             <div style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--primary)' }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--primary)', lineHeight: 1 }}>
                 {formatCurrency(totalRevenue)}
               </div>
               <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>6-month total</div>
             </div>
             <div style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#5E8FC0' }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#5E8FC0', lineHeight: 1 }}>
                 {formatCurrency(avgMonthly)}
               </div>
               <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>monthly average</div>
             </div>
             <div style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: data[data.length - 1].revenue > avgMonthly ? 'var(--success)' : 'var(--text-dark)' }}>
-                {formatCurrency(data[data.length - 1].revenue)}
+              <div style={{ fontSize: 18, fontWeight: 800, color: latestMonth.revenue > (prevMonth?.revenue || 0) ? 'var(--success)' : 'var(--error)', lineHeight: 1 }}>
+                {latestMonth.revenue > 0 ? formatCurrency(latestMonth.revenue * 1000) : '—'}
               </div>
               <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>latest month</div>
+            </div>
+            {prevMonth && (
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: monthOverMonthChange > 0 ? 'var(--success)' : monthOverMonthChange < 0 ? 'var(--error)' : 'var(--text-dark)', lineHeight: 1 }}>
+                  {monthOverMonthChange > 0 ? '+' : ''}{monthOverMonthChange}%
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>month-over-month</div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)' }}>
+              <div style={{ width: 16, height: 2, background: 'var(--primary)', borderRadius: 1 }} />
+              Monthly revenue booked
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)' }}>
+              <div style={{ width: 16, height: 2, background: '#5E8FC0', borderRadius: 1, opacity: 0.6 }} />
+              Deal count (right axis)
             </div>
           </div>
         </>
@@ -506,10 +550,10 @@ function ContactActivityGraph({ contactLogs }) {
     <div className="dash-card">
       <div className="dash-card-title">Contact Activity — Feeding the Engine</div>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-        Daily contacts + 7-day average — are you maintaining consistent activity?
+        Daily contacts (blue) vs 7-day average (orange) — are you maintaining consistent activity?
       </div>
 
-      <ResponsiveContainer width="100%" height={200}>
+      <ResponsiveContainer width="100%" height={240}>
         <LineChart data={activityData} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
           <XAxis 
@@ -539,7 +583,9 @@ function ContactActivityGraph({ contactLogs }) {
               return label
             }}
           />
-          <Line type="stepAfter" dataKey="contacts" stroke="rgba(0,0,0,0.15)" strokeWidth={1} dot={false} name="contacts" />
+          {/* Daily contacts — blue line, subtle */}
+          <Line type="linear" dataKey="contacts" stroke="#5E8FC0" strokeWidth={1.5} dot={false} name="contacts" opacity={0.6} />
+          {/* 7-day average — orange line, bold */}
           <Line type="monotone" dataKey="avg7" stroke="var(--primary)" strokeWidth={2.5} dot={false} name="avg7" />
         </LineChart>
       </ResponsiveContainer>
@@ -552,7 +598,7 @@ function ContactActivityGraph({ contactLogs }) {
           <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>7-day average</div>
         </div>
         <div style={{ textAlign: 'left' }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: monthTrend > 0 ? 'var(--success)' : 'var(--error)' }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: monthTrend > 0 ? 'var(--success)' : monthTrend < 0 ? 'var(--error)' : 'var(--text-dark)' }}>
             {monthTrend > 0 ? '+' : ''}{monthTrend}%
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>30-day trend</div>
@@ -564,12 +610,23 @@ function ContactActivityGraph({ contactLogs }) {
           <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>last 30 days</div>
         </div>
       </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)' }}>
+          <div style={{ width: 16, height: 1.5, background: '#5E8FC0', borderRadius: 1 }} />
+          Daily contacts
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)' }}>
+          <div style={{ width: 16, height: 2, background: 'var(--primary)', borderRadius: 1 }} />
+          7-day moving average
+        </div>
+      </div>
     </div>
   )
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════
-// SECTION: SALES CYCLE / EFFICIENCY
+// SECTION: SALES CYCLE / EFFICIENCY (MONTHLY TREND)
 // ════════════════════════════════════════════════════════════════════════════════════════
 function SalesCycleAnalysis({ clients, contactLogs }) {
   const active = clients.filter(c => c.stage === 'active' && c.won_at)
@@ -584,83 +641,139 @@ function SalesCycleAnalysis({ clients, contactLogs }) {
       const daysToClose = Math.round(
         (new Date(c.won_at) - new Date(firstContact.contacted_at)) / 86400000
       )
-      return Math.max(0, daysToClose)
+      return {
+        daysToClose: Math.max(0, daysToClose),
+        wonDate: c.won_at,
+      }
     })
     .filter(v => v !== null)
 
-  if (cycles.length === 0) {
-    return (
-      <div className="dash-card">
-        <div className="dash-card-title">Sales Cycle</div>
-        <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-          No won deals yet to analyze
-        </div>
-      </div>
-    )
+  // Group by month for trend
+  const monthlyData = {}
+  const now = new Date()
+  
+  // Generate last 6 months
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const monthKey = d.toLocaleDateString('en-IN', { year: '2-digit', month: 'short' })
+    monthlyData[monthKey] = { total: 0, count: 0, min: Infinity, max: 0 }
   }
 
-  const avgCycle = Math.round(cycles.reduce((a, b) => a + b, 0) / cycles.length)
-  const medianCycle = cycles.length > 0 ? cycles.sort((a, b) => a - b)[Math.floor(cycles.length / 2)] : 0
-  const minCycle = Math.min(...cycles)
-  const maxCycle = Math.max(...cycles)
+  cycles.forEach(c => {
+    const dDate = new Date(c.wonDate)
+    const monthKey = dDate.toLocaleDateString('en-IN', { year: '2-digit', month: 'short' })
+    if (monthlyData[monthKey]) {
+      monthlyData[monthKey].total += c.daysToClose
+      monthlyData[monthKey].count += 1
+      monthlyData[monthKey].min = Math.min(monthlyData[monthKey].min, c.daysToClose)
+      monthlyData[monthKey].max = Math.max(monthlyData[monthKey].max, c.daysToClose)
+    }
+  })
+
+  const trendData = Object.entries(monthlyData)
+    .map(([month, data]) => ({
+      month,
+      avgDays: data.count > 0 ? Math.round(data.total / data.count) : 0,
+      count: data.count,
+      min: data.min === Infinity ? 0 : data.min,
+      max: data.max,
+    }))
+
+  const allCycles = cycles.length
+  const currentAvg = cycles.length > 0 
+    ? Math.round(cycles.reduce((a, b) => a + b.daysToClose, 0) / cycles.length)
+    : 0
+  const currentMedian = cycles.length > 0
+    ? cycles.sort((a, b) => a.daysToClose - b.daysToClose)[Math.floor(cycles.length / 2)].daysToClose
+    : 0
 
   return (
     <div className="dash-card">
       <div className="dash-card-title">Sales Cycle — First Contact to Close</div>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-        Average vs median — is your typical deal getting faster?
+        Historical trend: is your sales cycle improving? Lower = faster closing.
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
-        <div style={{
-          background: 'var(--bg-light)',
-          borderRadius: 8,
-          padding: '12px',
-          textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--primary)' }}>
-            {avgCycle}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-            Average days
-          </div>
+      {trendData.filter(d => d.count > 0).length === 0 ? (
+        <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+          No won deals yet to analyze
         </div>
-        <div style={{
-          background: 'var(--bg-light)',
-          borderRadius: 8,
-          padding: '12px',
-          textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: '#FF9500' }}>
-            {medianCycle}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-            Median days
-          </div>
-        </div>
-        <div style={{
-          background: 'var(--bg-light)',
-          borderRadius: 8,
-          padding: '12px',
-          textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-dark)' }}>
-            {cycles.length}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-            Deals (sample)
-          </div>
-        </div>
-      </div>
+      ) : (
+        <>
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={trendData} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
+              <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
+              <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} allowDecimals={false} />
+              <Tooltip
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border-light)' }}
+                formatter={(v, name) => {
+                  if (name === 'avgDays') return [v + ' days', 'Average']
+                  if (name === 'count') return [v, 'Deals won']
+                  return [v, name]
+                }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="avgDays" 
+                stroke="var(--primary)" 
+                strokeWidth={2.5} 
+                dot={{ fill: 'var(--primary)', r: 5 }}
+                activeDot={{ r: 7 }}
+                name="avgDays"
+              />
+            </LineChart>
+          </ResponsiveContainer>
 
-      <div style={{ marginTop: 12, padding: '12px', background: 'var(--bg-light)', borderRadius: 8, fontSize: 12 }}>
-        Range: {minCycle}–{maxCycle} days
-        {cycles.length < 5 && (
-          <div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 4 }}>
-            ⚠️ Small sample size ({cycles.length} deals) — trend may not be reliable
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginTop: 16 }}>
+            <div style={{
+              background: 'var(--bg-light)',
+              borderRadius: 8,
+              padding: '12px',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--primary)' }}>
+                {currentAvg}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                Average days (all-time)
+              </div>
+            </div>
+            <div style={{
+              background: 'var(--bg-light)',
+              borderRadius: 8,
+              padding: '12px',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#FF9500' }}>
+                {currentMedian}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                Median days (typical deal)
+              </div>
+            </div>
+            <div style={{
+              background: 'var(--bg-light)',
+              borderRadius: 8,
+              padding: '12px',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-dark)' }}>
+                {allCycles}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                Deals analyzed
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+
+          {allCycles < 5 && (
+            <div style={{ marginTop: 12, padding: '12px', background: '#fff3cd', borderRadius: 8, fontSize: 12, color: '#856404' }}>
+              ⚠️ Small sample size ({allCycles} deals) — trend may not be reliable
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

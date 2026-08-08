@@ -1,5 +1,0 @@
-/* Revenue Realization: keep Y-axis labels fully visible even with the chart's negative left margin. */
-.dash-card:nth-child(2) .recharts-wrapper,
-.dash-card:nth-child(2) .recharts-surface {
-  overflow: visible !important;
-}

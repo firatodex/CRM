@@ -86,6 +86,51 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
     ? dealsWithRevenue.reduce((s, c) => s + Number(c.potential_revenue), 0) / dealsWithRevenue.length
     : null
 
+  // ── Days to close trend (first contact to won date) ────────────────────
+  const dealsWithMetrics = active
+    .filter(c => c.won_at)
+    .map(c => {
+      const clientLogs = contactLogs.filter(l => l.client_id === c.id)
+      if (clientLogs.length === 0) return null
+      const firstContact = clientLogs.reduce((min, l) =>
+        new Date(l.contacted_at) < new Date(min.contacted_at) ? l : min
+      )
+      const daysToClose = Math.round(
+        (new Date(c.won_at) - new Date(firstContact.contacted_at)) / 86400000
+      )
+      return {
+        clientId: c.id,
+        wonDate: c.won_at,
+        firstContactDate: firstContact.contacted_at,
+        daysToClose: Math.max(0, daysToClose),
+      }
+    })
+    .filter(m => m !== null)
+
+  // Group by month for trend
+  const daysToCloseTrendMap = {}
+  dealsWithMetrics.forEach(m => {
+    const wonDate = new Date(m.wonDate)
+    const monthKey = wonDate.toLocaleDateString('en-IN', { year: '2-digit', month: 'short' })
+    if (!daysToCloseTrendMap[monthKey]) {
+      daysToCloseTrendMap[monthKey] = { total: 0, count: 0 }
+    }
+    daysToCloseTrendMap[monthKey].total += m.daysToClose
+    daysToCloseTrendMap[monthKey].count += 1
+  })
+
+  const daysToCloseTrend = Object.entries(daysToCloseTrendMap)
+    .map(([month, data]) => ({
+      month,
+      avgDays: Math.round(data.total / data.count),
+      count: data.count,
+    }))
+    .sort((a, b) => {
+      const aDate = new Date('20' + a.month)
+      const bDate = new Date('20' + b.month)
+      return aDate - bDate
+    })
+
   const overdue  = pipeline.filter(c => c.next_action_due && c.next_action_due < today)
   const dueToday = pipeline.filter(c => c.next_action_due === today)
   // Only flag "no next action" for leads already in conversation — not fresh unworked leads
@@ -547,6 +592,84 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
                   </div>
                 )}
               </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Days to Close Trend */}
+      <div className="dash-card">
+        <div className="dash-card-title">Sales velocity: days to close</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+          Average days from first contact to deal won — falling trend = improving
+        </div>
+        {daysToCloseTrend.length === 0 ? (
+          <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+            No closed deals yet
+          </div>
+        ) : (
+          <>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={daysToCloseTrend} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
+                <XAxis 
+                  dataKey="month" 
+                  tick={{ fontSize: 10, fill: 'var(--text-muted)' }} 
+                  interval={Math.max(0, Math.floor(daysToCloseTrend.length / 6) - 1)}
+                />
+                <YAxis 
+                  tick={{ fontSize: 10, fill: 'var(--text-muted)' }} 
+                  allowDecimals={false}
+                  label={{ value: 'Days', angle: -90, position: 'insideLeft' }}
+                />
+                <Tooltip
+                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border-light)' }}
+                  formatter={(v, name) => {
+                    if (name === 'avgDays') return [v + ' days', 'Avg days to close']
+                    return [v, name]
+                  }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="avgDays" 
+                  stroke="#FF9500" 
+                  strokeWidth={2.5} 
+                  dot={{ fill: '#FF9500', r: 4 }}
+                  activeDot={{ r: 6 }}
+                  name="avgDays"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)' }}>
+                <div style={{ width: 16, height: 2.5, background: '#FF9500', borderRadius: 1 }} />
+                Average days from first contact to close
+              </div>
+              {daysToCloseTrend.length > 0 && (
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 12 }}>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: '#FF9500', lineHeight: 1 }}>
+                      {daysToCloseTrend[daysToCloseTrend.length - 1].avgDays}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>latest month</div>
+                  </div>
+                  {daysToCloseTrend.length > 1 && (() => {
+                    const first = daysToCloseTrend[0].avgDays
+                    const last = daysToCloseTrend[daysToCloseTrend.length - 1].avgDays
+                    const diff = last - first
+                    const trend = diff < 0 ? '↓ improving' : diff > 0 ? '↑ slowing' : '→ stable'
+                    const color = diff < 0 ? 'var(--success)' : diff > 0 ? 'var(--error)' : 'var(--text-muted)'
+                    return (
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 18, fontWeight: 800, color, lineHeight: 1 }}>
+                          {diff > 0 ? '+' : ''}{diff}
+                        </div>
+                        <div style={{ fontSize: 10, color }}>{trend}</div>
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
             </div>
           </>
         )}

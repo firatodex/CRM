@@ -4,7 +4,7 @@ import { PIPELINE_STAGES } from './stages'
 import KanbanColumn from './components/KanbanColumn'
 import AddClientModal from './components/AddClientModal'
 import DetailModal from './components/DetailModal'
-import Dashboard from './components/Dashboard'
+import DashboardRedesign from './components/DashboardRedesign'
 import TodayView from './components/TodayView'
 import SearchBar from './components/SearchBar'
 import ActiveDeadPanel from './components/ActiveDeadPanel'
@@ -33,6 +33,8 @@ export default function App() {
   const [contactLogs, setContactLogs] = useState([])
   const [tasks, setTasks] = useState([])
   const [pipelineSnapshots, setPipelineSnapshots] = useState([])
+  const [deals, setDeals] = useState([])
+  const [payments, setPayments] = useState([])
   const [clientsTab, setClientsTab] = useState('active') // 'active' | 'dead' — toggle within Clients view
   const [tasksViewMode, setTasksViewMode] = useState('list') // 'list' | 'calendar' | 'final_step'
   const [finalStepIds, setFinalStepIds] = useState([]) // client_ids manually flagged Final Step
@@ -78,6 +80,8 @@ export default function App() {
     fetchTasks(() => cancelled)
     fetchPipelineSnapshots(() => cancelled)
     fetchFinalStepIds(() => cancelled)
+    fetchDeals(() => cancelled)
+    fetchPayments(() => cancelled)
     return () => { cancelled = true }
   }, [])
 
@@ -219,6 +223,20 @@ export default function App() {
     if (isCancelled()) return
     if (error) { setError(`Failed to load Final Step list: ${error.message}`); return }
     setFinalStepIds((data || []).map(r => r.client_id))
+  }
+
+  async function fetchDeals(isCancelled = () => false) {
+    if (isCancelled()) return
+    const { data, error } = await supabase.from('deals').select('*').order('created_at', { ascending: false })
+    if (isCancelled()) return
+    if (!error && data) setDeals(data)
+  }
+
+  async function fetchPayments(isCancelled = () => false) {
+    if (isCancelled()) return
+    const { data, error } = await supabase.from('payments').select('*').order('created_at', { ascending: false })
+    if (isCancelled()) return
+    if (!error && data) setPayments(data)
   }
 
   async function handleAddFinalStep(clientId) {
@@ -714,7 +732,7 @@ export default function App() {
             onDrop={handleDrop}
           />
         ) : view === 'dashboard' ? (
-          <Dashboard clients={clients} contactLogs={contactLogs} pipelineSnapshots={pipelineSnapshots} />
+          <DashboardRedesign clients={clients} contactLogs={contactLogs} deals={deals} payments={payments} />
         ) : view === 'active' ? (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             <div className="clients-subtabs">

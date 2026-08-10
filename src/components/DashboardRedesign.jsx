@@ -408,7 +408,7 @@ function PipelineReserveGraph({ clients, pipelineSnapshots }) {
       ) : (
         <>
           <ResponsiveContainer width="100%" height={220}>
-            <ComposedChart data={pipelinePointsData} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
+            <ComposedChart data={pipelinePointsData} margin={{ top: 20, right: 8, left: -24, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
               <XAxis 
                 dataKey="label" 
@@ -441,7 +441,15 @@ function PipelineReserveGraph({ clients, pipelineSnapshots }) {
                     <g>
                       <circle cx={cx} cy={cy} r={5} fill="#34C759" />
                       {payload.pointsRemoved && (
-                        <text x={cx} y={cy - 12} textAnchor="middle" fontSize={11} fontWeight={700} fill="#34C759">
+                        <text 
+                          x={cx} 
+                          y={cy - 14} 
+                          textAnchor="middle" 
+                          fontSize={10} 
+                          fontWeight={700} 
+                          fill="#34C759"
+                          pointerEvents="none"
+                        >
                           -{payload.pointsRemoved}
                         </text>
                       )}

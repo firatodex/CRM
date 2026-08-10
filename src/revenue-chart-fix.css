@@ -1,10 +1,10 @@
 /* Revenue Realization chart: prevent the left Y-axis labels from being clipped. */
-.dash-card:nth-child(2) .recharts-wrapper,
-.dash-card:nth-child(2) .recharts-wrapper > svg {
+.dash-card:nth-child(3) .recharts-wrapper,
+.dash-card:nth-child(3) .recharts-wrapper > svg {
   overflow: visible !important;
 }
 
 /* Give the revenue axis labels enough visual room. */
-.dash-card:nth-child(2) .recharts-yAxis .recharts-cartesian-axis-tick-value {
+.dash-card:nth-child(3) .recharts-yAxis .recharts-cartesian-axis-tick-value {
   font-size: 10px;
 }

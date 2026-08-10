@@ -1024,12 +1024,12 @@ export default function DashboardRedesign({ clients = [], contactLogs = [], deal
       {/* Section 1: Business Scoreboard */}
       <BusinessScoreboard clients={clients} deals={deals} payments={payments} />
 
-      {/* Section 2: Revenue Realization */}
-      <RevenueRealization deals={deals} />
-
-      {/* Section 3: THE THREE CORE GRAPHS */}
+      {/* Section 2: THE THREE CORE GRAPHS */}
       {/* Graph 1: Contact Activity */}
       <ContactActivityGraph contactLogs={contactLogs} />
+
+      {/* Section 3: Revenue Realization */}
+      <RevenueRealization deals={deals} />
 
       {/* Graph 2: Pipeline Reserve (THE MOST IMPORTANT) */}
       <PipelineReserveGraph clients={clients} pipelineSnapshots={pipelineSnapshots} />

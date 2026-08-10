@@ -583,9 +583,9 @@ function ContactActivityGraph({ contactLogs }) {
               return label
             }}
           />
-          {/* Daily contacts — blue line, subtle */}
-          <Line type="linear" dataKey="contacts" stroke="#5E8FC0" strokeWidth={1.5} dot={false} name="contacts" opacity={0.6} />
-          {/* 7-day average — orange line, bold */}
+          {/* Daily contacts — blue line, subtle, smooth curve */}
+          <Line type="monotone" dataKey="contacts" stroke="#5E8FC0" strokeWidth={1.5} dot={false} name="contacts" opacity={0.6} />
+          {/* 7-day average — orange line, bold, smooth curve */}
           <Line type="monotone" dataKey="avg7" stroke="var(--primary)" strokeWidth={2.5} dot={false} name="avg7" />
         </LineChart>
       </ResponsiveContainer>

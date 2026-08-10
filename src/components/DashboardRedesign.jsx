@@ -516,20 +516,29 @@ function PipelineReserveGraph({ clients, pipelineSnapshots }) {
 // ════════════════════════════════════════════════════════════════════════════════════════
 function ContactActivityGraph({ contactLogs }) {
   const WINDOW = 90
-  const logLocalDates = contactLogs.map(l =>
-    l.contacted_at ? toLocalDateStr(new Date(l.contacted_at)) : null
-  )
+  
+  // Convert contact logs to IST dates (India Standard Time = UTC+5:30)
+  const logLocalDates = contactLogs.map(l => {
+    if (!l.contacted_at) return null
+    const utcDate = new Date(l.contacted_at)
+    // Add 5:30 to UTC to get IST
+    const istDate = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000))
+    return toLocalDateStr(istDate)
+  })
 
   const rawCounts = []
+  
+  // Generate dates for the last 90 days in IST
   for (let i = WINDOW - 1; i >= 0; i--) {
-    const d = new Date()
-    d.setDate(d.getDate() - i)
-    const localDate = toLocalDateStr(d)
+    const utcDate = new Date()
+    const istDate = new Date(utcDate.getTime() + (5.5 * 60 * 60 * 1000))
+    istDate.setDate(istDate.getDate() - i)
+    const localDate = toLocalDateStr(istDate)
     rawCounts.push({
       localDate,
       contacts: logLocalDates.filter(ld => ld === localDate).length,
       daysAgo: i,
-      d,
+      d: istDate,
     })
   }
 

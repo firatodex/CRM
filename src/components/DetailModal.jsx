@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { ALL_STAGES, TEMPERATURES, SOURCES, TASK_TYPES } from '../stages'
-import { waLink, formatDateTime, todayStr, formatPhoneDisplay } from '../utils'
+import { waLink, formatDateTime, formatCurrency, formatDue, todayStr, formatPhoneDisplay } from '../utils'
 import LeadIntelligencePanel, { SmartNoteDumper } from './LeadIntelligencePanel'
 import ClientTab from './ClientTab'
 import { supabase } from '../supabase'
@@ -194,6 +194,8 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
 
   const wa        = waLink(client.phone)
   const emailLink = client.email ? `mailto:${client.email}` : null
+  const currentStage = ALL_STAGES.find(stage => stage.key === form.stage)
+  const due = form.next_action_due ? formatDue(form.next_action_due) : null
 
   // Unified save: saves contact fields + log entry (if What happened has text)
   const handleSave = useCallback(async () => {
@@ -341,6 +343,25 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                 Email
               </a>
             )}
+          </div>
+        </div>
+
+        <div className="record-summary" aria-label="Lead summary">
+          <div className="record-summary-item">
+            <span>Stage</span>
+            <strong><i style={{ background: currentStage?.color }} />{currentStage?.label || 'Unassigned'}</strong>
+          </div>
+          <div className="record-summary-item">
+            <span>Commercial value</span>
+            <strong>{formatCurrency(form.proposal_value || form.potential_revenue || 0)}</strong>
+          </div>
+          <div className="record-summary-item record-next-action">
+            <span>Next action</span>
+            <strong>{form.next_action || 'No next action set'}</strong>
+          </div>
+          <div className={`record-summary-item ${due?.cls === 'overdue' ? 'record-overdue' : ''}`}>
+            <span>Due</span>
+            <strong>{due?.label || 'Not scheduled'}{form.next_action_time ? ` · ${form.next_action_time}` : ''}</strong>
           </div>
         </div>
 

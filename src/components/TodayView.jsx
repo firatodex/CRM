@@ -99,18 +99,17 @@ export default function TodayView({ clients, onCardClick, onDragStart, draggedCl
   const totalDue = dueLeads.length
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, marginBottom: 12 }}>
-        {totalDue > 0
-          ? <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--error)', background: 'var(--error-bg)', padding: '2px 10px', borderRadius: 20 }}>
-              {totalDue} need attention today
-            </span>
-          : <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>✓ All caught up</span>
-        }
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>
-          Priority sorted within each stage
-        </span>
+    <div className="today-workspace">
+      <div className="today-workspace-header">
+        <div>
+          <p className="section-eyebrow">Daily work</p>
+          <h1>Today’s follow-ups</h1>
+        </div>
+        <div className={`today-status ${totalDue > 0 ? 'today-status-attention' : 'today-status-clear'}`}>
+          {totalDue > 0 ? `${totalDue} lead${totalDue === 1 ? '' : 's'} need attention` : 'All caught up'}
+        </div>
       </div>
+      <p className="today-workspace-note">Work the most time-sensitive lead first. Cards are ordered by due date, time, and temperature within each stage.</p>
       <div className="board" style={{ flex: 1 }}>
         {columns.map(col => (
           <TodayColumn

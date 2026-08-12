@@ -609,29 +609,29 @@ export default function App() {
   const isBoardView = view === 'pipeline' || view === 'today'
 
   return (
-    <div className="app" style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+    <div className="app">
       {/* Top bar */}
       <div className="topbar">
         <div className="topbar-left">
           <span className="topbar-logo">OpsCraft</span>
         </div>
         <nav className="topbar-nav">
-          <button className={`nav-btn ${view === 'pipeline' ? 'active' : ''}`} onClick={() => setView('pipeline')}>
+          <button className={`nav-btn ${view === 'pipeline' ? 'active' : ''}`} onClick={() => setView('pipeline')} aria-current={view === 'pipeline' ? 'page' : undefined}>
             Pipeline
           </button>
-          <button className={`nav-btn ${view === 'today' ? 'active' : ''}`} onClick={() => setView('today')}>
+          <button className={`nav-btn ${view === 'today' ? 'active' : ''}`} onClick={() => setView('today')} aria-current={view === 'today' ? 'page' : undefined}>
             Today
             {overdueCount > 0 && <span className="nav-badge red">{overdueCount}</span>}
           </button>
-          <button className={`nav-btn ${view === 'dashboard' ? 'active' : ''}`} onClick={() => setView('dashboard')}>
+          <button className={`nav-btn ${view === 'dashboard' ? 'active' : ''}`} onClick={() => setView('dashboard')} aria-current={view === 'dashboard' ? 'page' : undefined}>
             Dashboard
           </button>
           {/* Active clients — won deals — now have their own view, with Archive accessible via toggle inside */}
-          <button className={`nav-btn ${view === 'active' ? 'active' : ''}`} onClick={() => setView('active')}>
+          <button className={`nav-btn ${view === 'active' ? 'active' : ''}`} onClick={() => setView('active')} aria-current={view === 'active' ? 'page' : undefined}>
             Clients
             {activeClients.length > 0 && <span className="nav-badge green">{activeClients.length}</span>}
           </button>
-          <button className={`nav-btn ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')}>
+          <button className={`nav-btn ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')} aria-current={view === 'tasks' ? 'page' : undefined}>
             Desk
             {urgentTaskCount > 0 && <span className="nav-badge red">{urgentTaskCount}</span>}
           </button>
@@ -679,17 +679,7 @@ export default function App() {
       </div>
 
       {/* Main */}
-      <div
-        className="main"
-        style={{
-          flex: 1,
-          minHeight: 0,
-          padding: isBoardView ? '16px 24px 0' : '16px 24px 32px',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: isBoardView ? 'hidden' : 'auto',
-        }}
-      >
+      <main className={`main ${isBoardView ? 'main-board' : ''}`}>
         {error && (
           <div className="error-banner" style={{ flexShrink: 0 }}>
             {error}
@@ -732,7 +722,15 @@ export default function App() {
             onDrop={handleDrop}
           />
         ) : view === 'dashboard' ? (
-          <DashboardRedesign clients={clients} contactLogs={contactLogs} deals={deals} payments={payments} pipelineSnapshots={pipelineSnapshots} />
+          <DashboardRedesign
+            clients={clients}
+            contactLogs={contactLogs}
+            deals={deals}
+            payments={payments}
+            tasks={tasks}
+            onOpenClient={setSelected}
+            onNavigate={setView}
+          />
         ) : view === 'active' ? (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             <div className="clients-subtabs">
@@ -794,7 +792,7 @@ export default function App() {
             )}
           </div>
         ) : null}
-      </div>
+      </main>
 
       {searchOpen && (
         <SearchBar

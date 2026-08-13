@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { PIPELINE_STAGES } from '../stages'
-import { formatCurrency, todayStr } from '../utils'
+import { formatCurrency, todayISTStr, todayStr, toISTDateKey } from '../utils'
 
 const DAY = 86400000
 
@@ -26,9 +26,9 @@ function daysSince(dateString) {
   return Math.max(0, Math.floor((Date.now() - new Date(dateString).getTime()) / DAY))
 }
 
-function PulseMetric({ label, value, detail, tone = 'default' }) {
+function PulseMetric({ label, value, detail, tone = 'default', priority = false }) {
   return (
-    <div className={`pulse-metric pulse-${tone}`}>
+    <div className={`pulse-metric pulse-${tone} ${priority ? 'pulse-priority' : ''}`}>
       <span className="pulse-label">{label}</span>
       <strong className="pulse-value">{value}</strong>
       <span className="pulse-detail">{detail}</span>
@@ -169,6 +169,7 @@ function DeeperInsights({ clients, contactLogs }) {
 
 export default function DashboardRedesign({ clients = [], contactLogs = [], deals = [], payments = [], tasks = [], onOpenClient, onNavigate }) {
   const today = todayStr()
+  const todayIST = todayISTStr()
   const data = useMemo(() => {
     const now = new Date()
     const isCurrentMonth = date => date && new Date(date).getMonth() === now.getMonth() && new Date(date).getFullYear() === now.getFullYear()
@@ -181,6 +182,9 @@ export default function DashboardRedesign({ clients = [], contactLogs = [], deal
     const collected = payments.filter(payment => payment.paid && isCurrentMonth(payment.paid_at)).reduce((sum, payment) => sum + currencyValue(payment.amount), 0)
     const outstanding = payments.filter(payment => !payment.paid).reduce((sum, payment) => sum + currencyValue(payment.amount), 0)
     const qualifiedValue = openPipeline.reduce((sum, client) => sum + currencyValue(client.proposal_value || client.potential_revenue), 0)
+    const logsToday = contactLogs.filter(log => log.contacted_at && toISTDateKey(log.contacted_at) === todayIST).length
+    const logs7 = contactLogs.filter(log => log.contacted_at && Date.now() - new Date(log.contacted_at).getTime() <= 7 * DAY).length
+    const openDeals = clients.filter(client => !['active', 'dead'].includes(client.stage)).length
     const attentionLeadIds = new Set([...overdueLeads, ...agingProposals].map(client => client.id))
     const attention = [
       ...overdueLeads.sort((a, b) => a.next_action_due.localeCompare(b.next_action_due)).slice(0, 3).map(client => ({
@@ -192,8 +196,8 @@ export default function DashboardRedesign({ clients = [], contactLogs = [], deal
     ]
     if (dueTasks.length) attention.push({ tone: 'default', title: `${dueTasks.length} task${dueTasks.length === 1 ? '' : 's'} due`, detail: 'Open Desk to complete or reschedule today’s work.', value: 'Open desk', destination: 'tasks' })
     if (outstanding > 0) attention.push({ tone: 'warning', title: 'Collections outstanding', detail: 'Unpaid payment records require review.', value: formatCurrency(outstanding), destination: 'active' })
-    return { booked, collected, outstanding, qualifiedValue, overdueLeads, agingProposals, proposals, dueTasks, needsAttention: attentionLeadIds.size + dueTasks.length, attention: attention.slice(0, 6) }
-  }, [clients, deals, payments, tasks, today])
+    return { booked, collected, outstanding, qualifiedValue, overdueLeads, agingProposals, proposals, dueTasks, needsAttention: attentionLeadIds.size + dueTasks.length, attention: attention.slice(0, 6), logsToday, logs7, openDeals }
+  }, [clients, contactLogs, deals, payments, tasks, today, todayIST])
 
   return (
     <div className="dashboard dashboard-decision">
@@ -205,11 +209,31 @@ export default function DashboardRedesign({ clients = [], contactLogs = [], deal
         <p>Today’s work, commercial exposure, and one clear revenue signal.</p>
       </header>
 
-      <section className="pulse-grid" aria-label="Business pulse metrics">
-        <PulseMetric label="Booked this month" value={displayCurrency(data.booked)} detail="Recorded deal value" />
-        <PulseMetric label="Cash collected" value={displayCurrency(data.collected)} detail={data.outstanding ? `${formatCurrency(data.outstanding)} outstanding` : 'No outstanding collection'} tone={data.outstanding ? 'warning' : 'success'} />
-        <PulseMetric label="Open pipeline" value={displayCurrency(data.qualifiedValue)} detail={`${data.proposals.length} open proposal${data.proposals.length === 1 ? '' : 's'} · contacted + proposal`} />
+      <section className="pulse-grid control-pulse-grid" aria-label="Business pulse metrics">
+        <PulseMetric label="Revenue booked" value={displayCurrency(data.booked)} detail="This month · recorded deal value" priority />
+        <PulseMetric label="Cash collected" value={displayCurrency(data.collected)} detail={data.outstanding ? `${formatCurrency(data.outstanding)} pending collection` : 'No pending collection'} tone={data.outstanding ? 'warning' : 'success'} priority />
+        <PulseMetric label="Pipeline exposure" value={displayCurrency(data.qualifiedValue)} detail={`${data.openDeals} open deals · ${data.proposals.length} proposals`} />
         <PulseMetric label="Needs attention" value={data.needsAttention} detail={`${data.overdueLeads.length} overdue · ${data.agingProposals.length} aging · ${data.dueTasks.length} tasks`} tone={data.overdueLeads.length ? 'danger' : 'default'} />
+      </section>
+
+      <section className="control-strip" aria-label="Operating summary">
+        <div>
+          <span>Pending collection</span>
+          <strong>{displayCurrency(data.outstanding)}</strong>
+        </div>
+        <div>
+          <span>Sales activity</span>
+          <strong>{data.logsToday} today</strong>
+          <small>{data.logs7} in 7 days</small>
+        </div>
+        <div>
+          <span>Open proposals</span>
+          <strong>{data.proposals.length}</strong>
+        </div>
+        <div>
+          <span>Overdue follow-ups</span>
+          <strong className={data.overdueLeads.length ? 'danger-text' : ''}>{data.overdueLeads.length}</strong>
+        </div>
       </section>
 
       <div className="dashboard-focus-grid">

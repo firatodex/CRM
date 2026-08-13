@@ -4,7 +4,15 @@ import {
 } from 'recharts'
 import { useMemo } from 'react'
 import { PIPELINE_STAGES } from '../stages'
-import { formatCurrency, todayStr } from '../utils'
+import {
+  addDaysToISTDateKey,
+  formatCurrency,
+  formatISTDateKey,
+  getISTDayOfMonth,
+  todayISTStr,
+  todayStr,
+  toISTDateKey,
+} from '../utils'
 
 function StatCard({ label, value, sub, color }) {
   return (
@@ -22,13 +30,6 @@ const STAGE_COLORS = {
   proposal: '#FF9500',
   active: '#34C759',
   dead: '#FF3B30',
-}
-
-function toLocalDateStr(date) {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const dd = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${dd}`
 }
 
 // Custom tooltip for the activity chart
@@ -150,21 +151,19 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
   // 90 days shows the full arc: where you started, where you built momentum,
   // whether today is a trend or a spike.
   const WINDOW = 90
+  const todayIST = todayISTStr()
   const logLocalDates = contactLogs.map(l =>
-    l.contacted_at ? toLocalDateStr(new Date(l.contacted_at)) : null
+    l.contacted_at ? toISTDateKey(l.contacted_at) : null
   )
 
   // Build raw daily counts first
   const rawCounts = []
   for (let i = WINDOW - 1; i >= 0; i--) {
-    const d = new Date()
-    d.setDate(d.getDate() - i)
-    const localDate = toLocalDateStr(d)
+    const localDate = addDaysToISTDateKey(todayIST, -i)
     rawCounts.push({
       localDate,
       contacts: logLocalDates.filter(ld => ld === localDate).length,
       daysAgo: i,
-      d,
     })
   }
 
@@ -173,15 +172,15 @@ export default function Dashboard({ clients, contactLogs, pipelineSnapshots = []
   const activityData = rawCounts.map((entry, idx) => {
     const window7 = rawCounts.slice(Math.max(0, idx - 6), idx + 1)
     const avg7 = Math.round((window7.reduce((s, e) => s + e.contacts, 0) / window7.length) * 10) / 10
-    const { daysAgo, d, contacts } = entry
+    const { daysAgo, localDate, contacts } = entry
 
     return {
       idx,                          // numeric key — recharts hover maps to this exactly
       daysAgo,
-      fullDate: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+      fullDate: formatISTDateKey(localDate),
       // Show label only at month start, every 2 weeks, and today
-      showLabel: daysAgo === 0 || d.getDate() === 1 || daysAgo % 14 === 0,
-      shortLabel: daysAgo === 0 ? 'Today' : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+      showLabel: daysAgo === 0 || getISTDayOfMonth(localDate) === 1 || daysAgo % 14 === 0,
+      shortLabel: daysAgo === 0 ? 'Today' : formatISTDateKey(localDate, { short: true }),
       contacts,
       avg7,
     }

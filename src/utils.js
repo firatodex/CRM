@@ -1,6 +1,62 @@
 // Returns today's date as YYYY-MM-DD in LOCAL time (not UTC).
 // Previously used toISOString() which returns UTC — in IST (UTC+5:30)
 // this caused "today" to flip to tomorrow after 6:30 PM, hiding overdue items.
+export const INDIA_TIME_ZONE = 'Asia/Kolkata'
+
+function dateKeyFromParts(parts) {
+  const byType = Object.fromEntries(parts.map(part => [part.type, part.value]))
+  return `${byType.year}-${byType.month}-${byType.day}`
+}
+
+const istDateKeyFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: INDIA_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+const istDateLabelFormatter = new Intl.DateTimeFormat('en-IN', {
+  timeZone: INDIA_TIME_ZONE,
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+})
+
+const istShortDateLabelFormatter = new Intl.DateTimeFormat('en-IN', {
+  timeZone: INDIA_TIME_ZONE,
+  day: 'numeric',
+  month: 'short',
+})
+
+// Convert any timestamp/date to its YYYY-MM-DD calendar date in India.
+// This is intentionally independent of the browser/computer timezone.
+export function toISTDateKey(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return dateKeyFromParts(istDateKeyFormatter.formatToParts(date))
+}
+
+export function todayISTStr() {
+  return toISTDateKey(new Date())
+}
+
+export function addDaysToISTDateKey(dateKey, days) {
+  if (!dateKey) return null
+  const date = new Date(`${dateKey}T00:00:00+05:30`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return toISTDateKey(date)
+}
+
+export function formatISTDateKey(dateKey, options = {}) {
+  if (!dateKey) return ''
+  const date = new Date(`${dateKey}T00:00:00+05:30`)
+  return (options.short ? istShortDateLabelFormatter : istDateLabelFormatter).format(date)
+}
+
+export function getISTDayOfMonth(dateKey) {
+  return Number(dateKey?.slice(8, 10) || 0)
+}
+
 export function todayStr() {
   const d = new Date()
   const y = d.getFullYear()

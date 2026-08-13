@@ -87,6 +87,10 @@ export default function TodayView({ clients, onCardClick, onDragStart, draggedCl
   // Only pipeline leads that are overdue or due today
   const pipeline = clients.filter(c => !['active', 'dead'].includes(c.stage))
   const dueLeads = pipeline.filter(c => c.next_action_due && c.next_action_due <= today)
+  const overdue = dueLeads.filter(c => c.next_action_due < today)
+  const dueToday = dueLeads.filter(c => c.next_action_due === today)
+  const highValue = dueLeads.filter(c => Number(c.proposal_value || c.potential_revenue || 0) > 0)
+    .sort((a, b) => Number(b.proposal_value || b.potential_revenue || 0) - Number(a.proposal_value || a.potential_revenue || 0))[0]
 
   // Group by pipeline stage, sorted by priority within each column
   const columns = PIPELINE_STAGES.map(stage => ({
@@ -109,7 +113,21 @@ export default function TodayView({ clients, onCardClick, onDragStart, draggedCl
           {totalDue > 0 ? `${totalDue} lead${totalDue === 1 ? '' : 's'} need attention` : 'All caught up'}
         </div>
       </div>
-      <p className="today-workspace-note">Work the most time-sensitive lead first. Cards are ordered by due date, time, and temperature within each stage.</p>
+      <div className="today-command-strip" aria-label="Today priorities">
+        <div className={overdue.length ? 'today-command-danger' : ''}>
+          <span>Start here</span>
+          <strong>{overdue.length ? `${overdue.length} overdue` : dueToday.length ? `${dueToday.length} due today` : 'No urgent leads'}</strong>
+        </div>
+        <div>
+          <span>Timed work</span>
+          <strong>{dueLeads.filter(c => c.next_action_time).length}</strong>
+        </div>
+        <div>
+          <span>Highest value due</span>
+          <strong>{highValue ? highValue.name : '—'}</strong>
+        </div>
+      </div>
+      <p className="today-workspace-note">Work overdue first, then timed follow-ups. Cards remain draggable so stage changes stay available from Today.</p>
       <div className="board" style={{ flex: 1 }}>
         {columns.map(col => (
           <TodayColumn

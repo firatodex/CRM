@@ -319,6 +319,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
         {/* Header */}
         <div className="detail-header">
           <div>
+            <div className="detail-eyebrow">Lead record</div>
             <div className="modal-title" style={{ margin: 0 }}>{client.name}</div>
             {client.company && <div className="detail-company">{client.company}</div>}
           </div>
@@ -365,6 +366,15 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
           </div>
         </div>
 
+        <div className="detail-context-line" aria-label="Current lead context">
+          <span>Who</span>
+          <strong>{[form.name, form.company].filter(Boolean).join(' · ') || 'Unnamed lead'}</strong>
+          <span>Deal</span>
+          <strong>{formatCurrency(form.proposal_value || form.potential_revenue || 0)}</strong>
+          <span>Next</span>
+          <strong>{form.next_action || 'Set a next action before closing the record'}</strong>
+        </div>
+
         {/* Two-column grid */}
         <div className="detail-grid detail-grid-wide">
 
@@ -400,7 +410,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
               </div>
             </div>
 
-            <div className="section-label">Contact</div>
+            <div className="section-label">Contact profile</div>
             <div className="field-row">
               <div className="field">
                 <label>Phone</label>
@@ -423,7 +433,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
             {/* Additional contacts — other people at this company you may speak to */}
             <LeadContactsSection clientId={client.id} />
 
-            <div className="section-label">Business</div>
+            <div className="section-label">Business context</div>
             <div className="field-row">
               <div className="field">
                 <label>Company</label>
@@ -446,7 +456,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
               </div>
             </div>
 
-            <div className="section-label">Strategy</div>
+            <div className="section-label">Deal strategy</div>
             {form.stage === 'proposal' && (
               <div className="field">
                 <label>Proposal value (₹)</label>
@@ -868,7 +878,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
             Delete
           </button>
           <div className="spacer" />
-          <span style={{ fontSize: 12, color: 'var(--success)', opacity: savedFlash ? 1 : 0, transition: 'opacity 0.3s' }}>
+          <span className="save-flash" style={{ opacity: savedFlash ? 1 : 0 }}>
             ✓ Saved
           </span>
           <button className="btn btn-secondary" onClick={() => {

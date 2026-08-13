@@ -1,12 +1,14 @@
 import { formatDue, formatRelativeTime, formatCurrency, waLink, todayStr } from '../utils'
-import { TEMPERATURES } from '../stages'
+import { ALL_STAGES, TEMPERATURES } from '../stages'
 
 export default function ClientCard({ client, onClick, onDragStart }) {
   const due = client.next_action_due ? formatDue(client.next_action_due) : null
   const wa = waLink(client.phone)
   const temp = TEMPERATURES.find(t => t.key === client.temperature)
+  const stage = ALL_STAGES.find(s => s.key === client.stage)
   const lastContact = formatRelativeTime(client.last_contacted_at)
   const isOverdue = client.next_action_due && client.next_action_due < todayStr()
+  const value = client.proposal_value || client.potential_revenue
 
   return (
     <div
@@ -21,17 +23,9 @@ export default function ClientCard({ client, onClick, onDragStart }) {
       <div className="card-top-row">
         <div className="card-name-row">
           {temp && <span className="temp-badge" title={temp.label}>{temp.emoji}</span>}
-          <span className="card-name">{client.name}</span>
+          <span className="card-name" title={client.name}>{client.name}</span>
           {client.progress_count > 0 && (
-            <span
-              title={`${client.progress_count} call${client.progress_count > 1 ? 's' : ''} marked as progress`}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 2,
-                fontSize: 11, fontWeight: 700, color: '#16a34a',
-                background: 'rgba(22,163,74,0.1)', borderRadius: 5,
-                padding: '1px 6px', marginLeft: 2,
-              }}
-            >
+            <span className="progress-chip" title={`${client.progress_count} call${client.progress_count > 1 ? 's' : ''} marked as progress`}>
               📈 {client.progress_count}
             </span>
           )}
@@ -58,12 +52,25 @@ export default function ClientCard({ client, onClick, onDragStart }) {
         </div>
       )}
 
-      {client.potential_revenue && (
-        <div className="card-revenue">{formatCurrency(client.potential_revenue)}</div>
-      )}
+      <div className="card-commercial-row">
+        {value ? (
+          <div className="card-revenue">{formatCurrency(value)}</div>
+        ) : (
+          <div className="card-revenue card-revenue-empty">No value set</div>
+        )}
+        {stage && (
+          <div className="card-stage" title={`Stage: ${stage.label}`}>
+            <span style={{ background: stage.color }} />
+            {stage.label}
+          </div>
+        )}
+      </div>
 
       {client.next_action && (
-        <div className="card-action card-action-clamped">{client.next_action}</div>
+        <div className="card-action card-action-clamped">
+          <span>Next</span>
+          {client.next_action}
+        </div>
       )}
 
       <div className="card-footer">
@@ -75,6 +82,7 @@ export default function ClientCard({ client, onClick, onDragStart }) {
         )}
         {lastContact && <span className="card-last-contact">Last: {lastContact}</span>}
       </div>
+      <span className="card-drag-affordance" aria-hidden="true">⋮⋮</span>
     </div>
   )
 }

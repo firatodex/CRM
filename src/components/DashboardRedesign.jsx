@@ -19,15 +19,13 @@ function toLocalDateStr(date) {
 // ════════════════════════════════════════════════════════════════════════════════════════
 // HELPER: Convert UTC to IST date string
 // ════════════════════════════════════════════════════════════════════════════════════════
-function toISTDateStr(utcDate) {
-  // Shift UTC timestamp by 5:30 hours to get IST
-  const istMs = utcDate.getTime() + (5.5 * 60 * 60 * 1000)
-  const istDate = new Date(istMs)
-  // Use getUTC methods on the shifted date to extract IST date
-  const y = istDate.getUTCFullYear()
-  const m = String(istDate.getUTCMonth() + 1).padStart(2, '0')
-  const dd = String(istDate.getUTCDate()).padStart(2, '0')
-  return `${y}-${m}-${dd}`
+function toISTDateStr(contactedAtString) {
+  // Database stores timestamps as: "2026-08-12T18:34:15.287+05:30"
+  // The date part is already in IST! Just extract it.
+  // No need to create Date objects or add/subtract offsets.
+  if (!contactedAtString) return null
+  const datePart = contactedAtString.split('T')[0]  // "2026-08-12"
+  return datePart
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════
@@ -531,38 +529,36 @@ function PipelineReserveGraph({ clients, pipelineSnapshots }) {
 function ContactActivityGraph({ contactLogs }) {
   const WINDOW = 90
   
-  // Convert contact logs to IST dates (India Standard Time = UTC+5:30)
-  // Use a map for O(1) lookup instead of filter
+  // Database stores: "2026-08-12T18:34:15.287+05:30" (already IST with offset)
+  // Just extract the date part - no timezone conversion needed!
   const contactsByISTDate = {}
   contactLogs.forEach(l => {
     if (!l.contacted_at) return
-    const utcDate = new Date(l.contacted_at)
-    const istDateStr = toISTDateStr(utcDate)
+    const istDateStr = toISTDateStr(l.contacted_at)
+    if (!istDateStr) return
     contactsByISTDate[istDateStr] = (contactsByISTDate[istDateStr] || 0) + 1
   })
 
   const rawCounts = []
   
   // Generate dates for the last 90 days in IST
+  const now = new Date()
   for (let i = WINDOW - 1; i >= 0; i--) {
-    // Start with current UTC time
-    const utcNow = new Date()
-    // Go back i days in UTC
-    const utcDate = new Date(utcNow)
-    utcDate.setUTCDate(utcDate.getUTCDate() - i)
+    // Go back i days from today
+    const dateObj = new Date(now)
+    dateObj.setDate(dateObj.getDate() - i)
     
-    // Convert UTC date to IST date string
-    const istDateStr = toISTDateStr(utcDate)
-    
-    // Create display date (shift for timezone display)
-    const istMs = utcDate.getTime() + (5.5 * 60 * 60 * 1000)
-    const istDisplayDate = new Date(istMs)
+    // Create IST date string (YYYY-MM-DD)
+    const y = dateObj.getFullYear()
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0')
+    const dd = String(dateObj.getDate()).padStart(2, '0')
+    const istDateStr = `${y}-${m}-${dd}`
     
     rawCounts.push({
       localDate: istDateStr,
       contacts: contactsByISTDate[istDateStr] || 0,
       daysAgo: i,
-      d: istDisplayDate,
+      d: dateObj,
     })
   }
 
@@ -574,9 +570,9 @@ function ContactActivityGraph({ contactLogs }) {
     return {
       idx,
       daysAgo,
-      fullDate: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }),
-      showLabel: daysAgo === 0 || d.getUTCDate() === 1 || daysAgo % 14 === 0,
-      shortLabel: daysAgo === 0 ? 'Today' : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }),
+      fullDate: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+      showLabel: daysAgo === 0 || d.getDate() === 1 || daysAgo % 14 === 0,
+      shortLabel: daysAgo === 0 ? 'Today' : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
       contacts,
       avg7,
     }

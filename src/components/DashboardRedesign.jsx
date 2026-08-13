@@ -72,16 +72,19 @@ function BusinessScoreboard({ clients, deals, payments }) {
 
   // Revenue this month (from deals won this month)
   const dealsThisMonth = deals.filter(d => {
-    const dDate = new Date(d.created_at)
-    return dDate.getMonth() === currentMonth && dDate.getFullYear() === currentYear
+    if (!d.created_at) return false
+    const datePart = d.created_at.split('T')[0]  // "2026-08-12"
+    const [year, month] = datePart.split('-').map(Number)
+    return month === (currentMonth + 1) && year === currentYear
   })
   const revenueThisMonth = dealsThisMonth.reduce((s, d) => s + Number(d.deal_value || 0), 0)
 
   // Cash collected this month
   const paymentsThisMonth = payments.filter(p => {
     if (!p.paid_at || !p.paid) return false
-    const pDate = new Date(p.paid_at)
-    return pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear
+    const datePart = p.paid_at.split('T')[0]  // "2026-08-12"
+    const [year, month] = datePart.split('-').map(Number)
+    return month === (currentMonth + 1) && year === currentYear
   })
   const cashCollectedThisMonth = paymentsThisMonth.reduce((s, p) => s + Number(p.amount || 0), 0)
 
@@ -92,8 +95,9 @@ function BusinessScoreboard({ clients, deals, payments }) {
   // Deals won this month
   const dealsWonThisMonth = active.filter(c => {
     if (!c.won_at) return false
-    const wDate = new Date(c.won_at)
-    return wDate.getMonth() === currentMonth && wDate.getFullYear() === currentYear
+    const datePart = c.won_at.split('T')[0]  // "2026-08-12"
+    const [year, month] = datePart.split('-').map(Number)
+    return month === (currentMonth + 1) && year === currentYear
   }).length
 
   // Average deal value
@@ -108,10 +112,15 @@ function BusinessScoreboard({ clients, deals, payments }) {
   // Pipeline reserve (contacted + proposal, weighted)
   const contacted = clients.filter(c => c.stage === 'contacted').length
   const proposal = clients.filter(c => c.stage === 'proposal').length
-  const proposalRecent = clients.filter(c => 
-    c.stage === 'proposal' && c.proposal_sent_at && 
-    new Date(c.proposal_sent_at) >= new Date(Date.now() - 30 * 86400000)
-  ).length
+  const proposalRecent = clients.filter(c => {
+    if (c.stage !== 'proposal' || !c.proposal_sent_at) return false
+    const datePart = c.proposal_sent_at.split('T')[0]
+    const [year, month, day] = datePart.split('-').map(Number)
+    const sentDate = new Date(year, month - 1, day)
+    const now = new Date()
+    const daysSinceSent = Math.floor((now - sentDate) / (1000 * 60 * 60 * 24))
+    return daysSinceSent <= 30
+  }).length
   const reserve = (contacted * 1) + (proposalRecent * 7)
 
   // Active proposals
@@ -119,15 +128,18 @@ function BusinessScoreboard({ clients, deals, payments }) {
 
   // Comparisons with last month
   const dealsLastMonth = deals.filter(d => {
-    const dDate = new Date(d.created_at)
-    return dDate.getMonth() === lastMonth && dDate.getFullYear() === lastMonthYear
+    if (!d.created_at) return false
+    const datePart = d.created_at.split('T')[0]
+    const [year, month] = datePart.split('-').map(Number)
+    return month === lastMonth && year === lastMonthYear
   })
   const revenueLastMonth = dealsLastMonth.reduce((s, d) => s + Number(d.deal_value || 0), 0)
 
   const dealsWonLastMonth = allClosed.filter(c => {
     if (!c.won_at) return false
-    const wDate = new Date(c.won_at)
-    return wDate.getMonth() === lastMonth && wDate.getFullYear() === lastMonthYear
+    const datePart = c.won_at.split('T')[0]
+    const [year, month] = datePart.split('-').map(Number)
+    return month === lastMonth && year === lastMonthYear
   }).length
 
   return (
@@ -208,8 +220,12 @@ function RevenueRealization({ deals }) {
 
   // Populate with deal data
   deals.forEach(d => {
-    const dDate = new Date(d.created_at)
-    const monthKey = dDate.toLocaleDateString('en-IN', { year: '2-digit', month: 'short' })
+    if (!d.created_at) return
+    const datePart = d.created_at.split('T')[0]  // "2026-08-12"
+    const [year, month] = datePart.split('-').map(Number)
+    // Create a local date object for display (just for month key)
+    const dateForDisplay = new Date(year, month - 1, 1)
+    const monthKey = dateForDisplay.toLocaleDateString('en-IN', { year: '2-digit', month: 'short' })
     if (monthlyData[monthKey]) {
       monthlyData[monthKey].revenue += Number(d.deal_value || 0)
       monthlyData[monthKey].dealCount += 1
@@ -697,8 +713,11 @@ function SalesCycleAnalysis({ clients, contactLogs }) {
   }
 
   cycles.forEach(c => {
-    const dDate = new Date(c.wonDate)
-    const monthKey = dDate.toLocaleDateString('en-IN', { year: '2-digit', month: 'short' })
+    if (!c.wonDate) return
+    const datePart = c.wonDate.split('T')[0]  // "2026-08-12"
+    const [year, month] = datePart.split('-').map(Number)
+    const dateForDisplay = new Date(year, month - 1, 1)
+    const monthKey = dateForDisplay.toLocaleDateString('en-IN', { year: '2-digit', month: 'short' })
     if (monthlyData[monthKey]) {
       monthlyData[monthKey].total += c.daysToClose
       monthlyData[monthKey].count += 1

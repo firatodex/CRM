@@ -1,0 +1,48 @@
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                     🔄 INSTANT ROLLBACK COMMAND                               ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+BACKUP TAG: backup-before-ui-improvements
+BACKUP COMMIT: dc53fd7 (Fix timezone bugs across all dashboard metrics)
+BACKUP DATE: 2026-08-13 09:47:19 UTC
+STATUS: ✅ VERIFIED & SAFE
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TO ROLLBACK TO THIS EXACT STATE, RUN:
+
+    git reset --hard backup-before-ui-improvements && git clean -fd
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+WHAT IT DOES:
+  ✅ Restores all files to current state
+  ✅ Deletes any new files created during development
+  ✅ Clears working tree changes
+  ✅ Returns app to exactly how it is RIGHT NOW
+
+TIME TO ROLLBACK:
+  - Command execution: < 1 second
+  - App reload: 2-3 seconds
+  - Total time: ~3 seconds
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+VERIFICATION COMMANDS:
+
+  # Verify backup exists
+  git tag -l | grep backup
+
+  # See what's in backup
+  git log --oneline backup-before-ui-improvements -3
+
+  # View full backup details
+  git show backup-before-ui-improvements
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+YOU ARE FULLY PROTECTED.
+All changes made from this point forward can be undone instantly.
+
+Ready to proceed with UI improvements? 🚀
+

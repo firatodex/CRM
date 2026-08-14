@@ -29,13 +29,66 @@ function toISTDateStr(contactedAtString) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════
+// SECTION: URGENCY ALERTS (OPERATIONAL FOCUS)
+// ════════════════════════════════════════════════════════════════════════════════════════
+function UrgencyAlerts({ clients }) {
+  const today = todayStr()
+  const pipeline = clients.filter(c => !['active', 'dead'].includes(c.stage))
+
+  // Overdue / urgent indicators
+  const overdue = pipeline.filter(c => c.next_action_due && c.next_action_due < today).length
+  const dueToday = pipeline.filter(c => c.next_action_due === today).length
+  const stale = pipeline.filter(c => {
+    if (!c.last_contacted_at) return true
+    const lastContactDatePart = c.last_contacted_at.split('T')[0]
+    const [year, month, day] = lastContactDatePart.split('-').map(Number)
+    const lastContactDate = new Date(year, month - 1, day)
+    const daysAgo = Math.floor((new Date() - lastContactDate) / (1000 * 60 * 60 * 24))
+    return daysAgo >= 7
+  }).length
+  const noAction = pipeline.filter(c => !c.next_action).length
+
+  const urgencyTotal = overdue + dueToday + stale + noAction
+
+  return (
+    <div className="urgency-alerts">
+      <div className="urgency-title">⚠️ Attention Required</div>
+      <div className="alert-list">
+        <div className={`alert-item ${overdue > 0 ? 'alert-red' : 'alert-green'}`}>
+          <span className="alert-count">{overdue}</span>
+          <span className="alert-text">Overdue follow-ups</span>
+        </div>
+        <div className={`alert-item ${dueToday > 0 ? 'alert-orange' : 'alert-green'}`}>
+          <span className="alert-count">{dueToday}</span>
+          <span className="alert-text">Due today</span>
+        </div>
+        <div className={`alert-item ${stale > 0 ? 'alert-orange' : 'alert-green'}`}>
+          <span className="alert-count">{stale}</span>
+          <span className="alert-text">Stale (7d+ no contact)</span>
+        </div>
+        <div className={`alert-item ${noAction > 0 ? 'alert-orange' : 'alert-green'}`}>
+          <span className="alert-count">{noAction}</span>
+          <span className="alert-text">No next action set</span>
+        </div>
+      </div>
+      {urgencyTotal > 0 && (
+        <div style={{ marginTop: 12, padding: '10px 12px', background: 'rgba(255, 59, 48, 0.08)', borderRadius: 6, fontSize: 12, color: '#FF3B30', fontWeight: 500 }}>
+          {urgencyTotal} item{urgencyTotal !== 1 ? 's' : ''} need{urgencyTotal !== 1 ? '' : 's'} attention
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════════════════════════
 // SECTION: BUSINESS SCOREBOARD (8 METRICS)
 // ════════════════════════════════════════════════════════════════════════════════════════
-function MetricCard({ label, value, comparison, color = 'var(--text-dark)', trend = null }) {
+function MetricCard({ label, value, comparison, color = 'var(--text-dark)', trend = null, borderColor = 'var(--primary)' }) {
   return (
     <div style={{
       background: 'var(--bg-white)',
       border: '1px solid var(--border-light)',
+      borderTop: `3px solid ${borderColor}`,
       borderRadius: 12,
       padding: '16px',
       display: 'flex',
@@ -152,18 +205,21 @@ function BusinessScoreboard({ clients, deals, payments }) {
           value={formatCurrency(revenueThisMonth)}
           comparison={revenueLastMonth > 0 ? `${((revenueThisMonth - revenueLastMonth) / revenueLastMonth * 100).toFixed(0)}% vs last month` : 'First month'}
           trend={revenueThisMonth > revenueLastMonth ? 'up' : 'down'}
+          borderColor="var(--primary)"
         />
         <MetricCard 
           label="Cash Collected"
           value={formatCurrency(cashCollectedThisMonth)}
           comparison={`${cashCollectedThisMonth > revenueThisMonth ? '+' : ''}${formatCurrency(cashCollectedThisMonth - revenueThisMonth)}`}
           color={cashCollectedThisMonth >= revenueThisMonth * 0.7 ? 'var(--success)' : 'var(--text-dark)'}
+          borderColor="var(--success)"
         />
         <MetricCard 
           label="Pending Collection"
           value={formatCurrency(pendingCollection)}
           comparison={pendingCollection > 0 ? `${(pendingCollection / revenueThisMonth * 100).toFixed(0)}% of revenue` : 'All paid'}
           color={pendingCollection > 0 ? 'var(--warning)' : 'var(--success)'}
+          borderColor="var(--warning)"
         />
 
         {/* Sales Output Section */}
@@ -172,18 +228,21 @@ function BusinessScoreboard({ clients, deals, payments }) {
           value={dealsWonThisMonth}
           comparison={dealsWonLastMonth > 0 ? `${dealsWonThisMonth - dealsWonLastMonth > 0 ? '+' : ''}${dealsWonThisMonth - dealsWonLastMonth} vs last month` : 'First month'}
           trend={dealsWonThisMonth > dealsWonLastMonth ? 'up' : 'down'}
+          borderColor="var(--primary)"
         />
         <MetricCard 
           label="Average Deal Value"
           value={formatCurrency(Math.round(avgDealValue))}
           comparison={dealsLastMonth.length > 0 ? `${((avgDealValue - dealsLastMonth.reduce((s, d) => s + Number(d.deal_value || 0), 0) / dealsLastMonth.length) / (dealsLastMonth.reduce((s, d) => s + Number(d.deal_value || 0), 0) / dealsLastMonth.length) * 100).toFixed(0)}% trend` : 'New'}
           color="var(--primary)"
+          borderColor="var(--primary)"
         />
         <MetricCard 
           label="Win Rate"
           value={`${winRatePercent}%`}
           comparison={`${active.length} won, ${dead.length} lost`}
           color={winRatePercent > 30 ? 'var(--success)' : winRatePercent > 10 ? 'var(--primary)' : 'var(--error)'}
+          borderColor="#5E8FC0"
         />
 
         {/* Future Section */}
@@ -192,12 +251,14 @@ function BusinessScoreboard({ clients, deals, payments }) {
           value={formatCurrency(reserve)}
           comparison={revenueThisMonth > 0 ? `${(reserve / revenueThisMonth).toFixed(1)}× monthly target` : 'No sales yet'}
           color="var(--primary)"
+          borderColor="var(--primary)"
         />
         <MetricCard 
           label="Active Proposals"
           value={activeProposals}
           comparison={activeProposals > 0 ? `${formatCurrency(Math.round(reserve / activeProposals))}/proposal` : 'None'}
           color="var(--primary)"
+          borderColor="#5E8FC0"
         />
       </div>
     </div>
@@ -1069,6 +1130,9 @@ export default function DashboardRedesign({ clients = [], contactLogs = [], deal
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '24px' }}>
+      {/* Section 0: Urgency Alerts (operational focus) */}
+      <UrgencyAlerts clients={clients} />
+
       {/* Section 1: Business Scoreboard */}
       <BusinessScoreboard clients={clients} deals={deals} payments={payments} />
 

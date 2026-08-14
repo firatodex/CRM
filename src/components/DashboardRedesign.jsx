@@ -81,7 +81,94 @@ function UrgencyAlerts({ clients }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════
-// SECTION: BUSINESS SCOREBOARD (8 METRICS)
+// SECTION: PIPELINE FUNNEL (CONVERSION VISUALIZATION)
+// ════════════════════════════════════════════════════════════════════════════════════════
+function PipelineFunnel({ clients }) {
+  const stages = [
+    { name: 'Lead', color: '#8B8B8F', count: clients.filter(c => c.stage === 'lead').length },
+    { name: 'Contacted', color: '#FF9500', count: clients.filter(c => c.stage === 'contacted').length },
+    { name: 'Proposal', color: '#C2622D', count: clients.filter(c => c.stage === 'proposal').length },
+    { name: 'Active', color: '#34C759', count: clients.filter(c => c.stage === 'active').length },
+    { name: 'Dead', color: '#FF3B30', count: clients.filter(c => c.stage === 'dead').length },
+  ]
+
+  const maxCount = Math.max(...stages.map(s => s.count), 1)
+  const totalPipeline = stages.slice(0, 4).reduce((s, st) => s + st.count, 0)
+
+  return (
+    <div className="dash-card">
+      <div className="dash-card-title">Sales Funnel</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {stages.map((stage, idx) => {
+          const width = maxCount > 0 ? (stage.count / maxCount) * 100 : 0
+          const isLosses = stage.name === 'Dead'
+          
+          return (
+            <div key={stage.name}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, alignItems: 'center' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dark)' }}>
+                  {stage.name}
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: stage.color }}>
+                  {stage.count}
+                </div>
+              </div>
+              <div style={{
+                width: '100%',
+                height: 24,
+                background: 'var(--bg-light)',
+                borderRadius: 6,
+                overflow: 'hidden',
+              }}>
+                <div style={{
+                  width: `${width}%`,
+                  height: '100%',
+                  background: stage.color,
+                  borderRadius: 6,
+                  transition: 'width 0.3s ease',
+                  opacity: isLosses ? 0.7 : 1,
+                }} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Conversion rates */}
+      <div style={{ marginTop: 16, padding: 12, background: 'var(--bg-light)', borderRadius: 8, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
+        {stages.length > 1 && (
+          <>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Lead → Contacted</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--primary)' }}>
+                {stages[0].count > 0 ? Math.round((stages[1].count / stages[0].count) * 100) : 0}%
+              </div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Contacted → Proposal</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--primary)' }}>
+                {stages[1].count > 0 ? Math.round((stages[2].count / stages[1].count) * 100) : 0}%
+              </div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Proposal → Won</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--success)' }}>
+                {stages[2].count > 0 ? Math.round((stages[3].count / stages[2].count) * 100) : 0}%
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {totalPipeline > 0 && (
+        <div style={{ marginTop: 12, padding: 10, background: 'rgba(194, 98, 45, 0.08)', borderRadius: 8, fontSize: 12, color: 'var(--primary)', fontWeight: 500 }}>
+          {totalPipeline} active opportunities in pipeline
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ════════════════════════════════════════════════════════════════════════════════════════
 function MetricCard({ label, value, comparison, color = 'var(--text-dark)', trend = null, borderColor = 'var(--primary)' }) {
   return (
@@ -1135,6 +1222,9 @@ export default function DashboardRedesign({ clients = [], contactLogs = [], deal
 
       {/* Section 1: Business Scoreboard */}
       <BusinessScoreboard clients={clients} deals={deals} payments={payments} />
+
+      {/* Section 1b: Pipeline Funnel */}
+      <PipelineFunnel clients={clients} />
 
       {/* Section 2: THE THREE CORE GRAPHS */}
       {/* Graph 1: Contact Activity */}

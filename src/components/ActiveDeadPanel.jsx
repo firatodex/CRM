@@ -8,6 +8,26 @@ const SORT_OPTIONS = [
   { key: 'created',        label: 'Date added' },
 ]
 
+function getRevenueColor(amount) {
+  const num = Number(amount) || 0
+  if (num >= 50000) return '#10b981' // Green - high
+  if (num >= 20000) return '#f59e0b' // Amber - medium
+  if (num >= 5000) return '#3b82f6'  // Blue - low-medium
+  return '#8b5cf6' // Purple - low
+}
+
+function formatRelativeDate(dateStr) {
+  if (!dateStr) return '—'
+  const date = new Date(dateStr)
+  const now = new Date()
+  const days = Math.floor((now - date) / (1000 * 60 * 60 * 24))
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  if (days < 7) return `${days}d ago`
+  if (days < 30) return `${Math.floor(days / 7)}w ago`
+  return `${Math.floor(days / 30)}m ago`
+}
+
 export default function ActiveDeadPanel({ clients, type, onCardClick }) {
   const isActive = type === 'active'
   const [search, setSearch] = useState('')
@@ -83,31 +103,84 @@ export default function ActiveDeadPanel({ clients, type, onCardClick }) {
       ) : filtered.length === 0 ? (
         <div className="list-empty">No results for "{search}"</div>
       ) : (
-        <div className="list-table">
-          <div className="list-row list-header-row">
-            <span className="list-cell cell-name">Name</span>
-            <span className="list-cell cell-company">Company</span>
-            <span className="list-cell cell-revenue">Revenue</span>
-            <span className="list-cell cell-contact">Last contact</span>
-            <span className="list-cell cell-actions"></span>
-          </div>
+        <div className="clients-grid">
           {filtered.map(c => {
             const wa = waLink(c.phone)
+            const revenue = Number(c.potential_revenue) || 0
+            const revColor = getRevenueColor(revenue)
+            const lastContact = formatRelativeDate(c.last_contacted_at)
+            
             return (
-              <div key={c.id} className="list-row" onClick={() => onCardClick(c)}>
-                <span className="list-cell cell-name">{c.name}</span>
-                <span className="list-cell cell-company">{c.company || '—'}</span>
-                <span className="list-cell cell-revenue">{formatCurrency(c.potential_revenue)}</span>
-                <span className="list-cell cell-contact">{formatRelativeTime(c.last_contacted_at) || '—'}</span>
-                <span className="list-cell cell-actions">
-                  {wa && (
-                    <a href={wa} target="_blank" rel="noreferrer" className="wa-btn" onClick={e => e.stopPropagation()}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                      </svg>
-                    </a>
+              <div 
+                key={c.id} 
+                className="client-card"
+                onClick={() => onCardClick(c)}
+              >
+                {/* Card Header */}
+                <div className="client-card-header">
+                  <div className="client-info-main">
+                    <div className="client-name">{c.name}</div>
+                    <div className="client-company">{c.company || 'No company'}</div>
+                  </div>
+                  
+                  {/* Revenue Badge */}
+                  <div className="client-revenue-badge" style={{ borderLeftColor: revColor }}>
+                    <div className="client-revenue-label">Potential</div>
+                    <div className="client-revenue-value" style={{ color: revColor }}>
+                      {formatCurrency(revenue)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card Body */}
+                <div className="client-card-body">
+                  {/* Contact Info */}
+                  {c.phone && (
+                    <div className="client-contact-info">
+                      <span className="client-phone">📱 {c.phone}</span>
+                    </div>
                   )}
-                </span>
+
+                  {/* Business Type */}
+                  {c.business_type && (
+                    <div className="client-badge-group">
+                      <span className="client-badge" style={{ background: '#f3f4f6', color: '#6b7280' }}>
+                        {c.business_type}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Pain Point */}
+                  {c.pain_point && (
+                    <div className="client-pain-point">
+                      <span className="client-pain-label">Pain:</span>
+                      <span className="client-pain-text">{c.pain_point.substring(0, 50)}...</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Card Footer */}
+                <div className="client-card-footer">
+                  <div className="client-last-contact">
+                    <span className="client-contact-label">Last contact</span>
+                    <span className="client-contact-time">{lastContact}</span>
+                  </div>
+
+                  <div className="client-actions">
+                    {wa && (
+                      <a 
+                        href={wa} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="client-wa-btn"
+                        onClick={e => e.stopPropagation()}
+                        title="Open WhatsApp"
+                      >
+                        💬
+                      </a>
+                    )}
+                  </div>
+                </div>
               </div>
             )
           })}

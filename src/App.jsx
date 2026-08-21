@@ -16,6 +16,10 @@ import FinalStepView from './components/FinalStepView'
 import CalendarView from './components/CalendarView'
 import { useOfflineSync } from './useOfflineSync'
 import { formatCurrency, todayStr } from './utils'
+import UsersManagement from './components/UsersManagement'
+import DealAssignmentModal from './components/DealAssignmentModal'
+import DeliveryTracker from './components/DeliveryTracker'
+import CustomerHealthDashboard from './components/CustomerHealthDashboard'
 
 // Fallback UUID generator for browsers without crypto.randomUUID (pre-Chrome 92).
 // Produces a valid v4 UUID string, since the contact_log.id column is type uuid
@@ -631,6 +635,9 @@ export default function App() {
             Clients
             {activeClients.length > 0 && <span className="nav-badge green">{activeClients.length}</span>}
           </button>
+          <button className={`nav-btn ${view === 'team' ? 'active' : ''}`} onClick={() => setView('team')}>Team</button>
+          <button className={`nav-btn ${view === 'delivery' ? 'active' : ''}`} onClick={() => setView('delivery')}>Delivery</button>
+          <button className={`nav-btn ${view === 'health' ? 'active' : ''}`} onClick={() => setView('health')}>Health</button>
           <button className={`nav-btn ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')}>
             Desk
             {urgentTaskCount > 0 && <span className="nav-badge red">{urgentTaskCount}</span>}

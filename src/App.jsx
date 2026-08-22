@@ -800,6 +800,12 @@ export default function App() {
               />
             )}
           </div>
+        ) : view === 'team' ? (
+          <UsersManagement />
+        ) : view === 'delivery' ? (
+          <DeliveryTracker />
+        ) : view === 'health' ? (
+          <CustomerHealthDashboard />
         ) : null}
       </div>
 

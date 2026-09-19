@@ -45,12 +45,15 @@ export function formatDateTime(dateStr) {
 }
 
 export function formatCurrency(amount) {
-  if (!amount) return '—'
+  if (amount === null || amount === undefined || amount === '') return '—'
   const num = Number(amount)
   if (isNaN(num)) return '—'
-  if (num >= 100000) return '₹' + (num / 100000).toFixed(num % 100000 === 0 ? 0 : 1) + 'L'
-  if (num >= 1000) return '₹' + (num / 1000).toFixed(num % 1000 === 0 ? 0 : 1) + 'K'
-  return '₹' + num.toLocaleString('en-IN')
+  if (num === 0) return '₹0'
+  const sign = num < 0 ? '-' : ''
+  const abs = Math.abs(num)
+  if (abs >= 100000) return sign + '₹' + (abs / 100000).toFixed(abs % 100000 === 0 ? 0 : 1) + 'L'
+  if (abs >= 1000) return sign + '₹' + (abs / 1000).toFixed(abs % 1000 === 0 ? 0 : 1) + 'K'
+  return sign + '₹' + abs.toLocaleString('en-IN')
 }
 
 // Build a WhatsApp link from a phone number.

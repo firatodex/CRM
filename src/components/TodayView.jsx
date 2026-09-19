@@ -1,7 +1,17 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { PIPELINE_STAGES } from '../stages'
 import ClientCard from './ClientCard'
+import CollectionQueueList from './CollectionQueueList'
+import RecordPaymentConfirm from './RecordPaymentConfirm'
+import PaymentToast from './PaymentToast'
 import { todayStr } from '../utils'
+import {
+  buildCollectionQueue,
+  confirmPayloadFromItem,
+  filterCollectionQueue,
+  summarizeCollectionQueue,
+} from '../utils/collectionQueue'
+import { markCollectionItemPaid, undoMarkCollectionPaid } from '../utils/markCollectionPaid'
 
 // Priority score within a column — higher = shown first
 function priorityScore(client) {
@@ -14,7 +24,6 @@ function priorityScore(client) {
     )
 
     if (diff < 0) {
-      // Overdue — base 10,000,000, most overdue first, then by time
       const dayScore = 10000000 + Math.abs(diff) * 10000
       if (client.next_action_time) {
         const [hh, mm] = client.next_action_time.split(':').map(Number)
@@ -23,28 +32,21 @@ function priorityScore(client) {
         score = dayScore
       }
     } else if (diff === 0) {
-      // Due today with time — time is king, 1,000,000 base
       if (client.next_action_time) {
         const [hh, mm] = client.next_action_time.split(':').map(Number)
-        // Earlier time = higher score. 1440 mins max, multiply by 5 to leave room for temp
         score = 1000000 + (1440 - (hh * 60 + mm)) * 5
       } else {
-        // Due today, no time — below all timed slots
         score = 500000
       }
     }
   }
 
-  // Temperature: only breaks ties within exact same time slot
-  // Max spread = 2, so it never overrides a 1-min time difference (gap of 5)
   if (client.temperature === 'hot')  score += 2
   if (client.temperature === 'warm') score += 1
 
   return score
 }
 
-// TodayColumn receives draggedClient + onDragStart from parent so drag-and-drop
-// actually works. Previously these were hardcoded to null/noop, breaking drag.
 function TodayColumn({ stage, clients, onCardClick, draggedClient, onDragStart, onDrop }) {
   const [dragOver, setDragOver] = useState(false)
   const isDragTarget = !!draggedClient && draggedClient.stage !== stage.key
@@ -81,14 +83,28 @@ function TodayColumn({ stage, clients, onCardClick, draggedClient, onDragStart, 
   )
 }
 
-export default function TodayView({ clients, onCardClick, onDragStart, draggedClient, onDrop }) {
+export default function TodayView({
+  clients,
+  deals = [],
+  payments = [],
+  onCardClick,
+  onDragStart,
+  draggedClient,
+  onDrop,
+  onPaymentReminderDone,
+}) {
   const today = todayStr()
+  const [busyKey, setBusyKey] = useState(null)
+  const [payError, setPayError] = useState(null)
+  const [confirm, setConfirm] = useState(null)
+  const [confirmBusy, setConfirmBusy] = useState(false)
+  const [toast, setToast] = useState(null)
+  const [toastUndoBusy, setToastUndoBusy] = useState(false)
+  const [hiddenKeys, setHiddenKeys] = useState(() => new Set())
 
-  // Only pipeline leads that are overdue or due today
   const pipeline = clients.filter(c => !['active', 'dead'].includes(c.stage))
   const dueLeads = pipeline.filter(c => c.next_action_due && c.next_action_due <= today)
 
-  // Group by pipeline stage, sorted by priority within each column
   const columns = PIPELINE_STAGES.map(stage => ({
     ...stage,
     clients: dueLeads
@@ -96,21 +112,134 @@ export default function TodayView({ clients, onCardClick, onDragStart, draggedCl
       .sort((a, b) => priorityScore(b) - priorityScore(a)),
   }))
 
+  // Same builder as Payments; Today shows overdue + due today (actionable)
+  const moneyQueue = useMemo(() => {
+    const full = buildCollectionQueue({ payments, deals, clients, today, horizonDays: 7 })
+    return filterCollectionQueue(full, { aging: 'actionable', today })
+      .filter(item => !hiddenKeys.has(item.key))
+  }, [payments, deals, clients, today, hiddenKeys])
+
+  const moneyTotals = useMemo(
+    () => summarizeCollectionQueue(moneyQueue, today),
+    [moneyQueue, today]
+  )
+
   const totalDue = dueLeads.length
+
+  function askMarkPaid(item) {
+    setPayError(null)
+    setConfirm(confirmPayloadFromItem(item))
+  }
+
+  async function handleConfirmPayment() {
+    if (!confirm) return
+    setConfirmBusy(true)
+    setPayError(null)
+    const itemKey = confirm.type === 'renewal'
+      ? `renew-${confirm.deal?.id}`
+      : `pay-${confirm.payment?.id}`
+    setBusyKey(itemKey)
+    try {
+      const result = await markCollectionItemPaid({
+        kind: confirm.type === 'renewal' ? 'renewal' : 'invoice',
+        payment: confirm.payment,
+        deal: confirm.deal,
+        client: confirm.client,
+        label: confirm.label,
+        amount: confirm.amount,
+      }, today)
+      setHiddenKeys(prev => new Set(prev).add(itemKey))
+      setConfirm(null)
+      setToast({
+        undo: result.undo,
+        clientName: result.clientName || confirm.client?.name,
+        amount: result.amount ?? confirm.amount,
+      })
+      onPaymentReminderDone?.()
+    } catch (err) {
+      setPayError(err?.message || 'Failed to mark paid')
+    } finally {
+      setConfirmBusy(false)
+      setBusyKey(null)
+    }
+  }
+
+  async function handleToastUndo() {
+    if (!toast?.undo) return
+    setToastUndoBusy(true)
+    try {
+      await undoMarkCollectionPaid(toast.undo)
+      setHiddenKeys(new Set())
+      setToast(null)
+      onPaymentReminderDone?.()
+    } catch (err) {
+      setPayError(err?.message || 'Failed to undo')
+    } finally {
+      setToastUndoBusy(false)
+    }
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, marginBottom: 12, flexWrap: 'wrap' }}>
         {totalDue > 0
           ? <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--error)', background: 'var(--error-bg)', padding: '2px 10px', borderRadius: 20 }}>
-              {totalDue} need attention today
+              {totalDue} lead{totalDue === 1 ? '' : 's'} need attention
             </span>
-          : <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>✓ All caught up</span>
+          : <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>✓ Pipeline caught up</span>
         }
+        {moneyQueue.length > 0 && (
+          <span style={{
+            fontSize: 12, fontWeight: 600, padding: '2px 10px', borderRadius: 20,
+            color: moneyTotals.overdueCount ? '#b91c1c' : '#a16207',
+            background: moneyTotals.overdueCount ? '#fee2e2' : '#fef3c7',
+          }}>
+            {moneyQueue.length} to collect
+            {moneyTotals.overdueCount ? ` · ${moneyTotals.overdueCount} overdue` : ''}
+          </span>
+        )}
         <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 'auto' }}>
           Priority sorted within each stage
         </span>
       </div>
+
+      {moneyQueue.length > 0 && (
+        <div style={{
+          flexShrink: 0,
+          marginBottom: 12,
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          background: 'var(--bg-white)',
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            padding: '10px 14px',
+            borderBottom: '1px solid var(--border-light)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 8,
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>Money to collect</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              Overdue & due today · same list as Payments
+            </div>
+          </div>
+          {payError && <div className="login-error" style={{ margin: 10 }}>{payError}</div>}
+          <CollectionQueueList
+            items={moneyQueue}
+            today={today}
+            onOpenClient={onCardClick}
+            onMarkPaid={askMarkPaid}
+            busyKey={busyKey}
+            compact
+            maxHeight={220}
+            emptyTitle="Nothing to collect"
+            emptyHint=""
+          />
+        </div>
+      )}
+
       <div className="board" style={{ flex: 1 }}>
         {columns.map(col => (
           <TodayColumn
@@ -124,6 +253,27 @@ export default function TodayView({ clients, onCardClick, onDragStart, draggedCl
           />
         ))}
       </div>
+
+      <RecordPaymentConfirm
+        open={!!confirm}
+        type={confirm?.type}
+        client={confirm?.client}
+        amount={confirm?.amount}
+        label={confirm?.label}
+        dueDate={confirm?.dueDate}
+        busy={confirmBusy}
+        onConfirm={handleConfirmPayment}
+        onCancel={() => !confirmBusy && setConfirm(null)}
+      />
+
+      <PaymentToast
+        open={!!toast}
+        clientName={toast?.clientName}
+        amount={toast?.amount}
+        onUndo={toast?.undo ? handleToastUndo : null}
+        undoBusy={toastUndoBusy}
+        onDismiss={() => setToast(null)}
+      />
     </div>
   )
 }

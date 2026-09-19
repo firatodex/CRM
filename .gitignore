@@ -1,0 +1,23 @@
+# Env
+.env
+.env.local
+.env.*.local
+
+# Dependencies / build
+node_modules/
+dist/
+
+# Graphify / editor
+graphify-out/
+graphify/
+.cursor/
+
+# Local revise / planning docs (do not ship)
+*_PLAN.md
+*reviseplan*
+*revise-plan*
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+*.log

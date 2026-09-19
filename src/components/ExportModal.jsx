@@ -17,7 +17,7 @@ function download(csv, filename) {
   URL.revokeObjectURL(url)
 }
 
-export default function ExportModal({ clients, contactLogs, onClose }) {
+export default function ExportModal({ clients, contactLogs, deals = [], payments = [], onClose }) {
   const today = todayStr()
 
   const exports = [
@@ -78,6 +78,55 @@ export default function ExportModal({ clients, contactLogs, onClose }) {
           c.last_contacted_at ? new Date(c.last_contacted_at).toLocaleDateString('en-IN') : 'Never'
         ])
         download(buildCSV(rows, headers), `active-clients-${today}.csv`)
+      }
+    },
+    {
+      title: 'Payment history',
+      desc: 'Every payment / credit / period row with client, deal model, amounts, and paid status.',
+      action() {
+        const clientMap = Object.fromEntries(clients.map(c => [c.id, c]))
+        const dealMap = Object.fromEntries(deals.map(d => [d.id, d]))
+        const headers = [
+          'Client','Company','Deal product','Pricing model','Cadence',
+          'Payment label','Kind','Amount (₹)','Due date','Paid','Paid at',
+          'Period start','Period end',
+        ]
+        const rows = [...payments]
+          .sort((a, b) => String(b.due_date || b.created_at || '').localeCompare(String(a.due_date || a.created_at || '')))
+          .map(p => {
+            const deal = dealMap[p.deal_id] || {}
+            const c = clientMap[deal.client_id] || {}
+            return [
+              c.name || '', c.company || '', deal.product_sold || '',
+              deal.pricing_model || '', deal.billing_cadence || '',
+              p.label || '', p.kind || '', p.amount,
+              p.due_date || '', p.paid ? 'yes' : 'no', p.paid_at || '',
+              p.period_start || '', p.period_end || '',
+            ]
+          })
+        download(buildCSV(rows, headers), `payment-history-${today}.csv`)
+      }
+    },
+    {
+      title: 'Payment plans',
+      desc: 'One row per deal — list/net price, discount, cadence, next reminder.',
+      action() {
+        const clientMap = Object.fromEntries(clients.map(c => [c.id, c]))
+        const headers = [
+          'Client','Company','Product','Model','List price','Discount %','Discount ₹','Net',
+          'Net monthly','Cadence','Start','Next reminder','Reminder on',
+        ]
+        const rows = deals.map(d => {
+          const c = clientMap[d.client_id] || {}
+          return [
+            c.name || '', c.company || '', d.product_sold || '', d.pricing_model || '',
+            d.list_price ?? '', d.discount_percent ?? '', d.discount_amount ?? '',
+            d.net_price ?? d.deal_value ?? '', d.net_monthly_price ?? '',
+            d.billing_cadence || '', d.billing_start_date || d.subscription_start || '',
+            d.next_reminder_at || '', d.reminder_enabled ? 'yes' : 'no',
+          ]
+        })
+        download(buildCSV(rows, headers), `payment-plans-${today}.csv`)
       }
     },
     {

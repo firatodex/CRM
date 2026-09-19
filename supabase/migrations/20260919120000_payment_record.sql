@@ -1,8 +1,8 @@
 -- Payment Record Phase 1 — extend deals + payments for close price / recurring / discount / reminders
--- Schema: dyzen
+-- Schema: public (deployment)
 -- Idempotent.
 
-alter table dyzen.deals
+alter table public.deals
   add column if not exists pricing_model text
     check (pricing_model is null or pricing_model in ('one_time', 'recurring')),
   add column if not exists list_price numeric,
@@ -22,7 +22,7 @@ alter table dyzen.deals
   add column if not exists reminder_enabled boolean not null default false,
   add column if not exists currency text not null default 'INR';
 
-alter table dyzen.payments
+alter table public.payments
   add column if not exists kind text
     check (kind is null or kind in ('one_time', 'recurring_period', 'adjustment')),
   add column if not exists period_start date,
@@ -30,14 +30,14 @@ alter table dyzen.payments
   add column if not exists reminder_sent_at timestamptz;
 
 -- Backfill pricing_model from legacy subscription_type where empty
-update dyzen.deals
+update public.deals
 set pricing_model = case
   when subscription_type in ('monthly', 'annual') then 'recurring'
   else 'one_time'
 end
 where pricing_model is null;
 
-update dyzen.deals
+update public.deals
 set list_price = coalesce(list_price, deal_value),
     net_price = coalesce(net_price, deal_value)
 where list_price is null or net_price is null;

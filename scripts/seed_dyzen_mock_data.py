@@ -123,7 +123,7 @@ def normalize_rows(rows: list[dict]) -> list[dict]:
     return [{k: r.get(k) for k in ordered} for r in rows]
 
 
-def rest_insert(url: str, key: str, table: str, rows: list[dict], chunk: int = 80):
+def rest_insert(url: str, key: str, table: str, rows: list[dict], chunk: int = 80, schema: str = "public"):
     if not rows:
         return
     rows = normalize_rows(rows)
@@ -137,8 +137,8 @@ def rest_insert(url: str, key: str, table: str, rows: list[dict], chunk: int = 8
                 "Content-Type": "application/json",
                 "apikey": key,
                 "Authorization": f"Bearer {key}",
-                "Accept-Profile": "dyzen",
-                "Content-Profile": "dyzen",
+                "Accept-Profile": schema,
+                "Content-Profile": schema,
                 "Prefer": "return=minimal",
             },
             method="POST",
@@ -173,15 +173,20 @@ def main() -> int:
     load_env()
     url = os.environ.get("VITE_SUPABASE_URL") or os.environ.get("SUPABASE_URL") or "http://192.168.1.69:8000"
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    schema = (
+        os.environ.get("SUPABASE_SCHEMA")
+        or os.environ.get("VITE_SUPABASE_SCHEMA")
+        or "public"
+    )
     if not key:
         print("Missing SUPABASE_SERVICE_ROLE_KEY", file=sys.stderr)
         return 1
 
-    print(f"Seeding {url} schema dyzen …")
+    print(f"Seeding {url} schema {schema} …")
 
     # Wipe app tables (keep schema). Order respects FKs.
-    wipe = """
-    set search_path to dyzen;
+    wipe = f"""
+    set search_path to {schema};
     truncate table
       win_loss_analysis, forecast_log, sales_activity_targets, objection_playbook,
       lead_scoring_rules, ideal_customer_profile,
@@ -204,7 +209,7 @@ def main() -> int:
         {"id": uid(), "email": "vikram.field@dyzen.solar", "name": "Vikram Rana", "phone": "9876500005", "role": "delivery", "department": "Field", "is_active": True},
         {"id": uid(), "email": "viewer@dyzen.solar", "name": "Read Only", "phone": None, "role": "viewer", "department": "Finance", "is_active": True},
     ]
-    rest_insert(url, key, "users", users)
+    rest_insert(url, key, "users", users, schema=schema)
     admin_id = users[0]["id"]
     sales_ids = [users[1]["id"], users[0]["id"]]
     delivery_ids = [users[2]["id"], users[4]["id"]]
@@ -315,7 +320,7 @@ def main() -> int:
 
         clients.append(row)
 
-    rest_insert(url, key, "clients", clients)
+    rest_insert(url, key, "clients", clients, schema=schema)
     print(f"Inserted {len(clients)} clients.")
 
     by_stage = {s: [c for c in clients if c["stage"] == s] for s in STAGES}
@@ -334,7 +339,7 @@ def main() -> int:
                 "phone": f"9{random.randint(100000000, 999999999)}",
                 "created_at": iso(days_ago(random.randint(1, 60))),
             })
-    rest_insert(url, key, "lead_contacts", lead_contacts)
+    rest_insert(url, key, "lead_contacts", lead_contacts, schema=schema)
 
     # ── contact_log ──
     contact_logs = []
@@ -381,7 +386,7 @@ def main() -> int:
                     "next_step": "Follow up",
                 } if random.random() > 0.6 else None,
             })
-    rest_insert(url, key, "contact_log", contact_logs)
+    rest_insert(url, key, "contact_log", contact_logs, schema=schema)
     print(f"Inserted {len(contact_logs)} contact logs.")
 
     # ── deals + payments + onboarding for proposal/active ──
@@ -626,17 +631,17 @@ def main() -> int:
             "lessons_learned": "Offer phased rollout earlier next time.",
         })
 
-    rest_insert(url, key, "deals", deals)
-    rest_insert(url, key, "payments", payments)
-    rest_insert(url, key, "onboarding_steps", onboarding)
-    rest_insert(url, key, "deal_ownership_history", ownership)
-    rest_insert(url, key, "implementations", implementations)
-    rest_insert(url, key, "implementation_milestones", milestones)
-    rest_insert(url, key, "implementation_blockers", blockers)
-    rest_insert(url, key, "implementation_tasks", impl_tasks)
-    rest_insert(url, key, "customer_health", health)
-    rest_insert(url, key, "health_history", health_hist)
-    rest_insert(url, key, "win_loss_analysis", win_loss)
+    rest_insert(url, key, "deals", deals, schema=schema)
+    rest_insert(url, key, "payments", payments, schema=schema)
+    rest_insert(url, key, "onboarding_steps", onboarding, schema=schema)
+    rest_insert(url, key, "deal_ownership_history", ownership, schema=schema)
+    rest_insert(url, key, "implementations", implementations, schema=schema)
+    rest_insert(url, key, "implementation_milestones", milestones, schema=schema)
+    rest_insert(url, key, "implementation_blockers", blockers, schema=schema)
+    rest_insert(url, key, "implementation_tasks", impl_tasks, schema=schema)
+    rest_insert(url, key, "customer_health", health, schema=schema)
+    rest_insert(url, key, "health_history", health_hist, schema=schema)
+    rest_insert(url, key, "win_loss_analysis", win_loss, schema=schema)
     print(f"Inserted {len(deals)} deals, {len(payments)} payments, {len(implementations)} implementations.")
 
     # ── tasks ──
@@ -673,11 +678,11 @@ def main() -> int:
             "done": False,
             "done_at": None,
         })
-    rest_insert(url, key, "tasks", tasks)
+    rest_insert(url, key, "tasks", tasks, schema=schema)
 
     # ── final step shortlist ──
     final_step = [{"client_id": c["id"]} for c in (by_stage["proposal"] + by_stage["contacted"])[:12]]
-    rest_insert(url, key, "final_step_clients", final_step)
+    rest_insert(url, key, "final_step_clients", final_step, schema=schema)
 
     # ── pipeline snapshots (45 days) ──
     snapshots = []
@@ -698,7 +703,7 @@ def main() -> int:
             "win_points_removed": wins * 24,
         })
         base = contacted
-    rest_insert(url, key, "pipeline_snapshots", snapshots)
+    rest_insert(url, key, "pipeline_snapshots", snapshots, schema=schema)
 
     # ── sales process reference data ──
     rest_insert(url, key, "ideal_customer_profile", [{
@@ -747,15 +752,15 @@ def main() -> int:
     ])
 
     # counts
-    counts_sql = """
-    select 'clients' as t, count(*)::int as c from dyzen.clients
-    union all select 'contact_log', count(*)::int from dyzen.contact_log
-    union all select 'deals', count(*)::int from dyzen.deals
-    union all select 'payments', count(*)::int from dyzen.payments
-    union all select 'tasks', count(*)::int from dyzen.tasks
-    union all select 'implementations', count(*)::int from dyzen.implementations
-    union all select 'pipeline_snapshots', count(*)::int from dyzen.pipeline_snapshots
-    union all select 'users', count(*)::int from dyzen.users
+    counts_sql = f"""
+    select 'clients' as t, count(*)::int as c from {schema}.clients
+    union all select 'contact_log', count(*)::int from {schema}.contact_log
+    union all select 'deals', count(*)::int from {schema}.deals
+    union all select 'payments', count(*)::int from {schema}.payments
+    union all select 'tasks', count(*)::int from {schema}.tasks
+    union all select 'implementations', count(*)::int from {schema}.implementations
+    union all select 'pipeline_snapshots', count(*)::int from {schema}.pipeline_snapshots
+    union all select 'users', count(*)::int from {schema}.users
     order by 1;
     """
     counts = pg_query(url, key, counts_sql)

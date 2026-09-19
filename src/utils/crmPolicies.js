@@ -1,6 +1,6 @@
 /** Optional CRM policies stored in localStorage (device-local). */
 
-const REQUIRE_PAYMENT_KEY = 'dyzen_require_payment_plan'
+const REQUIRE_PAYMENT_KEY = 'crm_require_payment_plan'
 
 export function getRequirePaymentPlan() {
   try {

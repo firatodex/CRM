@@ -2,7 +2,7 @@
 
 ## ✅ What's Been Done
 
-Your OpsCraft CRM now has **Phase 1 - Foundation Layer** fully integrated and ready to deploy!
+Your Dyzen Solar Technologies CRM now has **Phase 1 - Foundation Layer** fully integrated and ready to deploy!
 
 ### 4 New Components Added:
 1. **UsersManagement.jsx** - Team member CRUD with role-based access

@@ -20,11 +20,13 @@ alter table public.deals
   add column if not exists billing_start_date date,
   add column if not exists next_reminder_at date,
   add column if not exists reminder_enabled boolean not null default false,
-  add column if not exists currency text not null default 'INR';
+  add column if not exists currency text not null default 'INR',
+  add column if not exists first_month_amount numeric
+    check (first_month_amount is null or first_month_amount >= 0);
 
 alter table public.payments
   add column if not exists kind text
-    check (kind is null or kind in ('one_time', 'recurring_period', 'adjustment')),
+    check (kind is null or kind in ('one_time', 'recurring_period', 'adjustment', 'first_month')),
   add column if not exists period_start date,
   add column if not exists period_end date,
   add column if not exists reminder_sent_at timestamptz;

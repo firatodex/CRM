@@ -16,6 +16,8 @@ export const paymentRecordSchema = z.object({
   custom_interval_months: z.number().int().min(1).optional().nullable(),
   billing_start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   mark_paid_today: z.boolean().optional().default(false),
+  first_month_amount: z.number().nonnegative().optional().nullable(),
+  first_month_paid_today: z.boolean().optional().default(false),
   reminder_enabled: z.boolean().optional().default(false),
 }).superRefine((data, ctx) => {
   if (!(data.list_price > 0)) {

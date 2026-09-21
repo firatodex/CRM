@@ -103,7 +103,7 @@ export function exportCSV(clients) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `opscraft-leads-${todayStr()}.csv`
+  a.download = `dyzen-solar-leads-${todayStr()}.csv`
   a.click()
   URL.revokeObjectURL(url)
 }

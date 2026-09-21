@@ -601,7 +601,7 @@ export default function App() {
       {/* Top bar */}
       <div className="topbar">
         <div className="topbar-left">
-          <span className="topbar-logo">OpsCraft</span>
+          <span className="topbar-logo">Dyzen Solar Technologies</span>
         </div>
         <nav className="topbar-nav">
           <button className={`nav-btn ${view === 'pipeline' ? 'active' : ''}`} onClick={() => setView('pipeline')}>

@@ -102,6 +102,17 @@ export function computeNextReminder(billingStartDate, cadence, customMonths, tod
 }
 
 /**
+ * When a first-month extra is collected at billing start, the regular
+ * cadence reminder is the next period after that first month.
+ */
+export function computeNextReminderAfterFirstMonth(billingStartDate, cadence, customMonths, today = null) {
+  if (!billingStartDate) return null
+  const interval = monthsForCadence(cadence, customMonths)
+  const afterFirst = addMonths(billingStartDate, interval)
+  return recomputeNextReminderFromSchedule(afterFirst, cadence, customMonths, today)
+}
+
+/**
  * Mid-stream cadence / start edits: find the next period boundary on or after today,
  * walking forward from billing_start_date in cadence steps.
  */

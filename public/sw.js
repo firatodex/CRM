@@ -2,7 +2,7 @@
 // Minimal implementation: just makes the CRM installable,
 // no aggressive caching that could serve stale data.
 
-const CACHE = 'opscraft-v2'
+const CACHE = 'dyzen-solar-v1'
 
 self.addEventListener('install', e => {
   self.skipWaiting()

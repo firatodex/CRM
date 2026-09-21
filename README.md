@@ -1,4 +1,4 @@
-# OpsCraft CRM v2
+# Dyzen Solar Technologies CRM
 
 Kanban pipeline + dashboard + contact history. Built on React + Vite + Supabase.
 

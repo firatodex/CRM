@@ -19,7 +19,7 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={handleSubmit}>
-        <h1 className="login-title">OpsCraft CRM</h1>
+        <h1 className="login-title">Dyzen Solar Technologies</h1>
         <p className="login-subtitle">Sign in to continue</p>
 
         <label className="login-label">Email</label>

@@ -6,6 +6,7 @@ import {
   applyDiscount,
   cadenceLabel,
   computeNextReminder,
+  computeNextReminderAfterFirstMonth,
   recomputeNextReminderFromSchedule,
   legacyPaymentType,
   legacySubscriptionType,
@@ -46,6 +47,8 @@ export default function PaymentRecordModal({
   const [customMonths, setCustomMonths] = useState('1')
   const [billingStart, setBillingStart] = useState(today)
   const [markPaidToday, setMarkPaidToday] = useState(false)
+  const [firstMonthAmount, setFirstMonthAmount] = useState('')
+  const [firstMonthPaidToday, setFirstMonthPaidToday] = useState(false)
 
   useEffect(() => {
     if (!client) return
@@ -89,6 +92,8 @@ export default function PaymentRecordModal({
         setPlanTotal(String(synced.total))
       }
       setMarkPaidToday(false)
+      setFirstMonthAmount(numOrEmpty(existingDeal.first_month_amount > 0 ? existingDeal.first_month_amount : ''))
+      setFirstMonthPaidToday(false)
     } else {
       const seed = client.potential_revenue || client.proposal_value || ''
       setProductSold('')
@@ -102,6 +107,8 @@ export default function PaymentRecordModal({
       setCustomMonths('1')
       setBillingStart(today)
       setMarkPaidToday(false)
+      setFirstMonthAmount('')
+      setFirstMonthPaidToday(false)
     }
     setError(null)
   }, [client?.id, existingDeal?.id])
@@ -123,10 +130,15 @@ export default function PaymentRecordModal({
     return roundMoney(net / months)
   }, [pricingModel, net, months])
 
+  const hasFirstMonth = pricingModel === 'recurring' && roundMoney(Number(firstMonthAmount) || 0) > 0
+
   const nextReminder = useMemo(() => {
     if (pricingModel !== 'recurring' || !billingStart) return null
+    if (hasFirstMonth) {
+      return computeNextReminderAfterFirstMonth(billingStart, cadence, customMonths, today)
+    }
     return computeNextReminder(billingStart, cadence, customMonths, today)
-  }, [pricingModel, billingStart, cadence, customMonths, today])
+  }, [pricingModel, billingStart, cadence, customMonths, today, hasFirstMonth])
 
   function onListPriceChange(raw) {
     setListPrice(raw)
@@ -232,6 +244,10 @@ export default function PaymentRecordModal({
   function switchModel(model) {
     setPricingModel(model)
     setMarkPaidToday(false)
+    setFirstMonthPaidToday(false)
+    if (model !== 'recurring') {
+      setFirstMonthAmount('')
+    }
     if (model === 'recurring') {
       const seed = Number(listPrice) || Number(planTotal) || 0
       const synced = syncMonthlyAndTotal({ monthly: 0, total: seed, months, edited: 'total' })
@@ -275,6 +291,8 @@ export default function PaymentRecordModal({
         : null,
       billing_start_date: billingStart || today,
       mark_paid_today: pricingModel === 'one_time' ? markPaidToday : false,
+      first_month_amount: pricingModel === 'recurring' ? roundMoney(Number(firstMonthAmount) || 0) : null,
+      first_month_paid_today: pricingModel === 'recurring' ? firstMonthPaidToday : false,
       reminder_enabled: pricingModel === 'recurring',
     }
 
@@ -294,20 +312,27 @@ export default function PaymentRecordModal({
       }
 
       const start = data.billing_start_date || today
+      const firstMonth = data.pricing_model === 'recurring' ? roundMoney(Number(data.first_month_amount) || 0) : 0
       const cadenceChanged = !!(existingDeal && data.pricing_model === 'recurring' && (
         existingDeal.billing_cadence !== data.billing_cadence
         || Number(existingDeal.custom_interval_months || 0) !== Number(data.custom_interval_months || 0)
         || (existingDeal.billing_start_date || existingDeal.subscription_start) !== start
+        || Number(existingDeal.first_month_amount || 0) !== firstMonth
       ))
 
-      // New plans: first reminder from start. Mid-stream cadence/start edits: snap to next boundary >= today.
-      const nextRem = data.pricing_model === 'recurring'
-        ? (existingDeal && cadenceChanged
-          ? recomputeNextReminderFromSchedule(start, data.billing_cadence, data.custom_interval_months, today)
-          : (existingDeal?.next_reminder_at && !cadenceChanged
-            ? existingDeal.next_reminder_at
-            : computeNextReminder(start, data.billing_cadence, data.custom_interval_months, today)))
-        : null
+      // New plans: first reminder from start. With first-month extra, regular cadence starts after that month.
+      let nextRem = null
+      if (data.pricing_model === 'recurring') {
+        if (firstMonth > 0) {
+          nextRem = computeNextReminderAfterFirstMonth(start, data.billing_cadence, data.custom_interval_months, today)
+        } else if (existingDeal && cadenceChanged) {
+          nextRem = recomputeNextReminderFromSchedule(start, data.billing_cadence, data.custom_interval_months, today)
+        } else if (existingDeal?.next_reminder_at && !cadenceChanged) {
+          nextRem = existingDeal.next_reminder_at
+        } else {
+          nextRem = computeNextReminder(start, data.billing_cadence, data.custom_interval_months, today)
+        }
+      }
 
       const dealRow = {
         client_id: client.id,
@@ -326,6 +351,7 @@ export default function PaymentRecordModal({
         billing_start_date: start,
         next_reminder_at: nextRem,
         reminder_enabled: !!data.reminder_enabled,
+        first_month_amount: firstMonth > 0 ? firstMonth : null,
         currency: 'INR',
         deal_value: data.net_price,
         payment_type: legacyPaymentType(data.pricing_model),
@@ -370,14 +396,51 @@ export default function PaymentRecordModal({
         }
       }
 
-      // First collection row — only if none exist yet for this deal
+      // First-month extra (recurring) — upsert so edits stay in sync
+      if (data.pricing_model === 'recurring' && firstMonth > 0) {
+        const { data: existingFirst } = await supabase
+          .from('payments')
+          .select('id, paid')
+          .eq('deal_id', deal.id)
+          .eq('kind', 'first_month')
+          .maybeSingle()
+
+        const firstRow = {
+          deal_id: deal.id,
+          label: 'First month',
+          amount: firstMonth,
+          due_date: start,
+          kind: 'first_month',
+          period_start: start,
+          period_end: periodEnd(start, '1m', 1),
+        }
+        if (existingFirst?.id) {
+          const patch = { ...firstRow }
+          if (!existingFirst.paid && data.first_month_paid_today) {
+            patch.paid = true
+            patch.paid_at = today
+          }
+          const { error: firstUpErr } = await supabase.from('payments').update(patch).eq('id', existingFirst.id)
+          if (firstUpErr) throw firstUpErr
+        } else {
+          const { error: firstInErr } = await supabase.from('payments').insert({
+            ...firstRow,
+            paid: !!data.first_month_paid_today,
+            paid_at: data.first_month_paid_today ? today : null,
+          })
+          if (firstInErr) throw firstInErr
+        }
+      }
+
+      // First regular collection row — only if none exist yet and no first-month extra
       const { data: existingPayments } = await supabase
         .from('payments')
         .select('id')
         .eq('deal_id', deal.id)
+        .neq('kind', 'first_month')
         .limit(1)
 
-      if (!existingPayments?.length) {
+      if (!existingPayments?.length && firstMonth <= 0) {
         const pStart = start
         const pEnd = data.pricing_model === 'recurring'
           ? periodEnd(start, data.billing_cadence, data.custom_interval_months)
@@ -457,7 +520,7 @@ export default function PaymentRecordModal({
             style={inputStyle}
             value={productSold}
             onChange={e => setProductSold(e.target.value)}
-            placeholder="e.g. OpsCraft CRM Annual"
+            placeholder="e.g. Rooftop solar AMC"
           />
         </div>
 
@@ -567,6 +630,39 @@ export default function PaymentRecordModal({
                 />
               </div>
             </div>
+            <div style={{
+              marginBottom: 12,
+              padding: '12px 12px 10px',
+              border: '1px dashed var(--border)',
+              borderRadius: 10,
+              background: 'var(--bg-light)',
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>First month payment</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.4 }}>
+                Optional extra collected in month 1. Recurring {cadenceLabel(cadence, customMonths).toLowerCase()} starts after that.
+              </div>
+              <div className="field" style={{ marginBottom: 8 }}>
+                <label>First month amount (₹)</label>
+                <input
+                  style={inputStyle}
+                  type="number"
+                  min="0"
+                  value={firstMonthAmount}
+                  onChange={e => setFirstMonthAmount(e.target.value)}
+                  placeholder="Leave blank if same as monthly"
+                />
+              </div>
+              {roundMoney(Number(firstMonthAmount) || 0) > 0 && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={firstMonthPaidToday}
+                    onChange={e => setFirstMonthPaidToday(e.target.checked)}
+                  />
+                  First month already paid today
+                </label>
+              )}
+            </div>
           </>
         )}
 
@@ -631,9 +727,12 @@ export default function PaymentRecordModal({
           <Row label="Net payable" value={formatCurrency(net)} bold />
           {pricingModel === 'recurring' && (
             <>
+              {hasFirstMonth && (
+                <Row label="First month" value={formatCurrency(roundMoney(Number(firstMonthAmount) || 0))} bold />
+              )}
               <Row label="Net monthly" value={formatCurrency(netMonthly)} />
               <Row label="Cadence" value={cadenceLabel(cadence, customMonths)} />
-              <Row label="Renews on" value={nextReminder || '—'} bold />
+              <Row label={hasFirstMonth ? 'Then renews on' : 'Renews on'} value={nextReminder || '—'} bold />
             </>
           )}
         </div>

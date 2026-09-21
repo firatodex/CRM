@@ -266,7 +266,10 @@ export default function ClientTab({ client }) {
     ? [
         deal.pricing_model === 'recurring' ? 'Recurring' : deal.pricing_model === 'one_time' ? 'One-time' : null,
         deal.pricing_model === 'recurring' ? cadenceLabel(deal.billing_cadence, deal.custom_interval_months) : null,
-        formatCurrency(deal.net_price ?? deal.deal_value) + ' net',
+        formatCurrency(deal.net_price ?? deal.deal_value) + (deal.pricing_model === 'recurring' ? '/period' : ' net'),
+        deal.pricing_model === 'recurring' && Number(deal.first_month_amount) > 0
+          ? `First month ${formatCurrency(deal.first_month_amount)}`
+          : null,
       ].filter(Boolean).join(' · ')
     : null
 

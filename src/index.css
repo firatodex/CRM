@@ -1,5 +1,5 @@
 :root {
-  /* ── OpsCraft signature palette ──
+  /* ── Dyzen Solar Technologies signature palette ──
      Shifted from generic iOS blue to a warm copper accent against
      deep ink — distinct, still professional for B2B, references the
      energy/solar domain without literal sun icons. */
@@ -80,10 +80,11 @@ body {
 .topbar-left { display: flex; align-items: center; gap: 16px; }
 
 .topbar-logo {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 800;
   color: var(--primary);
-  letter-spacing: -0.5px;
+  letter-spacing: -0.4px;
+  white-space: nowrap;
 }
 
 .topbar-nav {
@@ -1402,6 +1403,13 @@ body.modal-open {
 .flex-3 { flex: 3; }
 
 @media (max-width: 768px) {
+  .topbar-logo {
+    font-size: 12px;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .dash-row {
     flex-direction: column;
   }
@@ -1863,11 +1871,12 @@ body.modal-open {
   border-top: 3px solid var(--primary);
 }
 .login-title {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 800;
   margin: 0;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.4px;
   color: var(--text-dark);
+  line-height: 1.25;
 }
 .login-title::after {
   content: '';

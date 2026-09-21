@@ -54,7 +54,7 @@ COMPANIES = [
     "Municipal Light", "Industrial Park Solar", "Cold Storage Power", "EV Charge Solar",
 ]
 PRODUCTS = [
-    "OpsCraft CRM Annual", "Pipeline + Delivery Suite", "Field Force Pack",
+    "Rooftop Solar AMC", "Pipeline + Delivery Suite", "Field Force Pack",
     "PM Surya Ghar Tracker", "Dealer Portal Add-on",
 ]
 PAINS = [

@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════
--- OpsCraft CRM v2 — Supabase Schema
+-- Dyzen Solar Technologies CRM — Supabase Schema
 -- Run this in Supabase → SQL Editor
 -- ══════════════════════════════════════════════════
 

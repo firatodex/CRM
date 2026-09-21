@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════
--- OpsCraft CRM — Sales Process Optimization
+-- Dyzen Solar Technologies CRM — Sales Process Optimization
 -- Adds ICP/lead scoring, structured discovery calls, deal
 -- momentum tracking, objection playbook, activity targets,
 -- forecasting, and win/loss analysis.

@@ -20,6 +20,7 @@ export default function CollectionQueueList({
   today,
   onOpenClient,
   onMarkPaid,
+  onRequestPdf,
   busyKey = null,
   emptyTitle = 'Nothing to collect',
   emptyHint = 'All open amounts are settled for this filter.',
@@ -52,6 +53,7 @@ export default function CollectionQueueList({
           today={today}
           onOpenClient={onOpenClient}
           onMarkPaid={onMarkPaid}
+          onRequestPdf={onRequestPdf}
           busy={busyKey === item.key}
           compact={compact}
         />
@@ -65,6 +67,7 @@ export function CollectionQueueRow({
   today,
   onOpenClient,
   onMarkPaid,
+  onRequestPdf,
   busy = false,
   compact = false,
 }) {
@@ -89,14 +92,25 @@ export function CollectionQueueRow({
         <span className="collection-row-status" style={{ color: statusColor, background: statusBg }}>
           {st.label}
         </span>
-        <button
-          type="button"
-          className="btn btn-primary btn-sm collection-row-action"
-          disabled={busy}
-          onClick={() => onMarkPaid?.(item)}
-        >
-          {busy ? '…' : 'Mark paid'}
-        </button>
+        <div className="collection-row-actions">
+          {onRequestPdf && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm collection-row-action"
+              onClick={() => onRequestPdf(item)}
+            >
+              PDF
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-primary btn-sm collection-row-action"
+            disabled={busy}
+            onClick={() => onMarkPaid?.(item)}
+          >
+            {busy ? '…' : 'Mark paid'}
+          </button>
+        </div>
       </div>
     )
   }
@@ -126,14 +140,25 @@ export function CollectionQueueRow({
       </div>
       <div className="collection-row-side">
         <div className="collection-row-amount">{formatCurrency(item.amount)}</div>
-        <button
-          type="button"
-          className="btn btn-primary btn-sm collection-row-action"
-          disabled={busy}
-          onClick={() => onMarkPaid?.(item)}
-        >
-          {busy ? '…' : 'Mark paid'}
-        </button>
+        <div className="collection-row-actions">
+          {onRequestPdf && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm collection-row-action"
+              onClick={() => onRequestPdf(item)}
+            >
+              Request PDF
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-primary btn-sm collection-row-action"
+            disabled={busy}
+            onClick={() => onMarkPaid?.(item)}
+          >
+            {busy ? '…' : 'Mark paid'}
+          </button>
+        </div>
       </div>
     </div>
   )

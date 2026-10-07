@@ -100,30 +100,82 @@ export async function completePaymentReminder(deal, opts = {}) {
   return { deal: updatedDeal, payment }
 }
 
-/** Derive badge for an active client from their deal + payment rows. */
-export function paymentStatusForClient(clientId, deals, payments, today = todayStr()) {
-  const deal = (deals || []).find(d => d.client_id === clientId)
-  if (!deal) return { key: 'no_plan', label: 'No plan', tone: 'muted' }
+/** Derive badge for an active client from all their deals + payment rows. */
+export function dealsForClient(clientId, deals) {
+  return (deals || []).filter(d => d.client_id === clientId)
+}
 
+function dealPricingModel(deal) {
+  return deal?.pricing_model
+    || (deal?.subscription_type === 'one_time' ? 'one_time' : deal?.subscription_type ? 'recurring' : null)
+}
+
+/** One-time with no unpaid rows (and at least one payment or zero value) = settled. Recurring with no unpaid / overdue reminder = current/settled for badge. */
+export function isDealSettled(deal, payments, today = todayStr()) {
+  if (!deal) return false
   const rows = (payments || []).filter(p => p.deal_id === deal.id)
   const unpaid = rows.filter(p => !p.paid)
-  const unpaidBal = unpaid.reduce((s, p) => s + (Number(p.amount) || 0), 0)
-  const hasOverduePay = unpaid.some(p => p.due_date && p.due_date < today)
-  const reminderOverdue = deal.reminder_enabled && deal.next_reminder_at && deal.next_reminder_at < today
+  if (unpaid.length > 0) return false
+  const model = dealPricingModel(deal)
+  if (model === 'recurring') {
+    if (deal.reminder_enabled !== false && deal.next_reminder_at && deal.next_reminder_at < today) return false
+    return true
+  }
+  // one-time / unknown: plan with value but no payment rows yet is not settled
+  const value = Number(deal.net_price ?? deal.deal_value) || 0
+  if (rows.length === 0 && value > 0) return false
+  return true
+}
 
-  if (hasOverduePay || reminderOverdue) {
-    return { key: 'overdue', label: 'Overdue', tone: 'danger', deal, unpaidBal }
+/** Prefer newest open (not settled) deal; else newest deal; else null. */
+export function pickOpenOrNewestDeal(clientId, deals, payments, today = todayStr()) {
+  const list = dealsForClient(clientId, deals)
+    .slice()
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+  if (!list.length) return null
+  return list.find(d => !isDealSettled(d, payments, today)) || list[0]
+}
+
+export function paymentStatusForClient(clientId, deals, payments, today = todayStr()) {
+  const list = dealsForClient(clientId, deals)
+  if (!list.length) return { key: 'no_plan', label: 'No plan', tone: 'muted' }
+
+  let unpaidBal = 0
+  let hasOverdue = false
+  let hasUnpaid = false
+  let anyPaid = false
+  let primary = pickOpenOrNewestDeal(clientId, deals, payments, today)
+
+  for (const deal of list) {
+    const rows = (payments || []).filter(p => p.deal_id === deal.id)
+    const unpaid = rows.filter(p => !p.paid)
+    const bal = unpaid.reduce((s, p) => s + (Number(p.amount) || 0), 0)
+    unpaidBal += bal
+    if (unpaid.some(p => p.due_date && p.due_date < today)) hasOverdue = true
+    if (deal.reminder_enabled !== false && deal.next_reminder_at && deal.next_reminder_at < today) hasOverdue = true
+    if (bal > 0) hasUnpaid = true
+    if (rows.some(p => p.paid)) anyPaid = true
   }
-  if (unpaidBal > 0) {
-    return { key: 'unpaid', label: 'Unpaid', tone: 'warn', deal, unpaidBal }
+
+  if (hasOverdue) {
+    return { key: 'overdue', label: 'Overdue', tone: 'danger', deal: primary, unpaidBal }
   }
-  if (rows.length === 0 && !(deal.net_price || deal.deal_value)) {
-    return { key: 'no_plan', label: 'No plan', tone: 'muted', deal }
+  if (hasUnpaid) {
+    return { key: 'unpaid', label: 'Unpaid', tone: 'warn', deal: primary, unpaidBal }
   }
-  if (rows.some(p => p.paid) && unpaidBal === 0) {
-    return { key: 'paid', label: deal.pricing_model === 'recurring' ? 'Current' : 'Paid', tone: 'ok', deal }
+  if (list.every(d => isDealSettled(d, payments, today))) {
+    const allRecurring = list.every(d => dealPricingModel(d) === 'recurring')
+    return {
+      key: 'paid',
+      label: allRecurring ? 'Current' : 'Paid',
+      tone: 'ok',
+      deal: primary,
+    }
   }
-  return { key: 'partial', label: 'Partial', tone: 'warn', deal, unpaidBal }
+  if (anyPaid) {
+    return { key: 'partial', label: 'Partial', tone: 'warn', deal: primary, unpaidBal }
+  }
+  return { key: 'partial', label: 'Partial', tone: 'warn', deal: primary, unpaidBal }
 }
 
 /** Recurring deals with a reminder due today or overdue. */

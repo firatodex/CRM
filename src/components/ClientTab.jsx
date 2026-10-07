@@ -4,6 +4,7 @@ import { formatCurrency, todayStr } from '../utils'
 import PaymentRecordModal from './PaymentRecordModal'
 import RecordPaymentConfirm from './RecordPaymentConfirm'
 import PaymentToast from './PaymentToast'
+import PaymentRequestModal from './PaymentRequestModal'
 import { cadenceLabel } from '../utils/paymentMath'
 import {
   buildCollectionQueue,
@@ -11,6 +12,7 @@ import {
   dueStatus,
 } from '../utils/collectionQueue'
 import { markCollectionItemPaid, undoMarkCollectionPaid } from '../utils/markCollectionPaid'
+import { isDealSettled, pickOpenOrNewestDeal } from '../utils/paymentReminders'
 
 const DEFAULT_ONBOARDING_STEPS = [
   'Onboarding call',
@@ -38,11 +40,13 @@ function formatDisplayDate(iso) {
 }
 
 export default function ClientTab({ client }) {
-  const [deal, setDeal] = useState(null)
-  const [payments, setPayments] = useState([])
+  const [deals, setDeals] = useState([])
+  const [selectedDealId, setSelectedDealId] = useState(null)
+  const [allPayments, setAllPayments] = useState([])
   const [onboarding, setOnboarding] = useState([])
   const [loading, setLoading] = useState(true)
   const [showPaymentRecord, setShowPaymentRecord] = useState(false)
+  const [recordMode, setRecordMode] = useState('edit') // 'new' | 'edit'
   const [moneyError, setMoneyError] = useState(null)
   const [payConfirm, setPayConfirm] = useState(null)
   const [payConfirmBusy, setPayConfirmBusy] = useState(false)
@@ -50,6 +54,7 @@ export default function ClientTab({ client }) {
   const [adjustBusy, setAdjustBusy] = useState(false)
   const [toast, setToast] = useState(null)
   const [toastUndoBusy, setToastUndoBusy] = useState(false)
+  const [requestPdf, setRequestPdf] = useState(null)
 
   useEffect(() => {
     loadAll()
@@ -58,21 +63,41 @@ export default function ClientTab({ client }) {
 
   async function loadAll() {
     setLoading(true)
-    const [{ data: d }, { data: s }] = await Promise.all([
-      supabase.from('deals').select('*').eq('client_id', client.id).maybeSingle(),
+    const [{ data: dealRows }, { data: s }] = await Promise.all([
+      supabase.from('deals').select('*').eq('client_id', client.id).order('created_at', { ascending: false }),
       supabase.from('onboarding_steps').select('*').eq('client_id', client.id).order('step_order'),
     ])
-    if (d) {
-      setDeal(d)
-      const { data: p } = await supabase.from('payments').select('*').eq('deal_id', d.id).order('created_at')
-      setPayments(p || [])
+    const list = dealRows || []
+    setDeals(list)
+    if (list.length) {
+      const ids = list.map(d => d.id)
+      const { data: p } = await supabase
+        .from('payments')
+        .select('*')
+        .in('deal_id', ids)
+        .order('created_at')
+      const pays = p || []
+      setAllPayments(pays)
+      setSelectedDealId(prev => {
+        if (prev && list.some(d => d.id === prev)) return prev
+        return pickOpenOrNewestDeal(client.id, list, pays)?.id || list[0].id
+      })
     } else {
-      setDeal(null)
-      setPayments([])
+      setAllPayments([])
+      setSelectedDealId(null)
     }
     setOnboarding(s || [])
     setLoading(false)
   }
+
+  const deal = useMemo(
+    () => deals.find(d => d.id === selectedDealId) || null,
+    [deals, selectedDealId]
+  )
+  const payments = useMemo(
+    () => allPayments.filter(p => p.deal_id === selectedDealId),
+    [allPayments, selectedDealId]
+  )
 
   async function ensureOnboardingSteps() {
     if (onboarding.length > 0) return
@@ -88,14 +113,16 @@ export default function ClientTab({ client }) {
   }
 
   async function markDelivered() {
+    if (!deal) return
     const today = todayStr()
     await supabase.from('deals').update({ delivery_status: true, delivered_at: today }).eq('id', deal.id)
-    setDeal(d => ({ ...d, delivery_status: true, delivered_at: today }))
+    setDeals(prev => prev.map(d => d.id === deal.id ? { ...d, delivery_status: true, delivered_at: today } : d))
   }
 
   async function unmarkDelivered() {
+    if (!deal) return
     await supabase.from('deals').update({ delivery_status: false, delivered_at: null }).eq('id', deal.id)
-    setDeal(d => ({ ...d, delivery_status: false, delivered_at: null }))
+    setDeals(prev => prev.map(d => d.id === deal.id ? { ...d, delivery_status: false, delivered_at: null } : d))
   }
 
   function daysRemaining(fromDate, totalDays) {
@@ -223,7 +250,7 @@ export default function ClientTab({ client }) {
         kind: 'adjustment',
       }).select().single()
       if (error) throw error
-      if (data) setPayments(prev => [...prev, data])
+      if (data) setAllPayments(prev => [...prev, data])
       setShowAdjustments(true)
     } catch (err) {
       setMoneyError(err?.message || 'Failed to add adjustment')
@@ -234,13 +261,13 @@ export default function ClientTab({ client }) {
 
   async function updateAdjustment(id, field, value) {
     const updated = { [field]: field === 'amount' ? Number(value) : value }
-    setPayments(prev => prev.map(p => p.id === id ? { ...p, ...updated } : p))
+    setAllPayments(prev => prev.map(p => p.id === id ? { ...p, ...updated } : p))
     await supabase.from('payments').update(updated).eq('id', id)
   }
 
   async function deletePayment(id) {
     await supabase.from('payments').delete().eq('id', id)
-    setPayments(prev => prev.filter(p => p.id !== id))
+    setAllPayments(prev => prev.filter(p => p.id !== id))
   }
 
   async function toggleStep(step) {
@@ -282,16 +309,80 @@ export default function ClientTab({ client }) {
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             Money
           </div>
-          {deal && (
-            <button
-              type="button"
-              onClick={() => setShowPaymentRecord(true)}
-              style={{ fontSize: 11, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
-            >
-              Edit plan
-            </button>
-          )}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            {deal && (
+              <button
+                type="button"
+                onClick={() => { setRecordMode('edit'); setShowPaymentRecord(true) }}
+                style={{ fontSize: 11, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+              >
+                Edit plan
+              </button>
+            )}
+            {deals.length > 0 && (
+              <button
+                type="button"
+                onClick={async () => {
+                  await ensureOnboardingSteps()
+                  setRecordMode('new')
+                  setShowPaymentRecord(true)
+                }}
+                style={{ fontSize: 11, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}
+              >
+                + New project
+              </button>
+            )}
+          </div>
         </div>
+
+        {deals.length > 1 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+            {deals.map(d => {
+              const settled = isDealSettled(d, allPayments, today)
+              const model = d.pricing_model === 'recurring' ? 'Recurring' : 'One-time'
+              const selected = d.id === selectedDealId
+              const label = d.product_sold || model
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => setSelectedDealId(d.id)}
+                  style={{
+                    textAlign: 'left',
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    border: `1.5px solid ${selected ? 'var(--primary)' : 'var(--border-light)'}`,
+                    background: selected ? 'rgba(194,98,45,0.08)' : 'var(--bg-white)',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 650, color: selected ? 'var(--primary)' : 'var(--text)' }}>
+                        {label}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                        {model} · {formatCurrency(d.net_price ?? d.deal_value)}
+                        {d.pricing_model === 'recurring' ? '/period' : ''}
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, flexShrink: 0,
+                      padding: '2px 8px', borderRadius: 999,
+                      color: settled ? '#15803d' : '#a16207',
+                      background: settled ? '#dcfce7' : '#fef3c7',
+                    }}>
+                      {settled
+                        ? (d.pricing_model === 'recurring' ? 'Current' : 'Settled')
+                        : 'Open'}
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {!deal ? (
           <div style={{
@@ -305,10 +396,24 @@ export default function ClientTab({ client }) {
                 type="button"
                 onClick={async () => {
                   await ensureOnboardingSteps()
+                  setRecordMode('new')
                   setShowPaymentRecord(true)
                 }}
               >
                 Add plan
+              </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                type="button"
+                style={{ marginLeft: 8 }}
+                onClick={() => setRequestPdf({
+                  client,
+                  amount: 0,
+                  mode: 'advance',
+                  note: '',
+                })}
+              >
+                Request PDF
               </button>
             </div>
           </div>
@@ -324,6 +429,14 @@ export default function ClientTab({ client }) {
               <div style={{ fontSize: 13, fontWeight: 650, marginBottom: 8 }}>{planLine}</div>
               {deal.product_sold && (
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>{deal.product_sold}</div>
+              )}
+              {deals.length === 1 && isDealSettled(deal, allPayments, today) && (
+                <div style={{
+                  display: 'inline-block', fontSize: 10, fontWeight: 700, marginBottom: 8,
+                  padding: '2px 8px', borderRadius: 999, color: '#15803d', background: '#dcfce7',
+                }}>
+                  {deal.pricing_model === 'recurring' ? 'Current' : 'Settled'}
+                </div>
               )}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 12 }}>
@@ -372,10 +485,35 @@ export default function ClientTab({ client }) {
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
-                  onClick={() => setShowPaymentRecord(true)}
+                  onClick={() => setRequestPdf({
+                    client,
+                    amount: nextDue?.amount ?? outstanding ?? 0,
+                    mode: deal?.pricing_model === 'recurring' ? 'general' : 'advance',
+                    note: nextDue?.label || deal?.product_sold || '',
+                  })}
+                >
+                  Request PDF
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => { setRecordMode('edit'); setShowPaymentRecord(true) }}
                 >
                   Edit plan
                 </button>
+                {isDealSettled(deal, allPayments, today) && (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={async () => {
+                      await ensureOnboardingSteps()
+                      setRecordMode('new')
+                      setShowPaymentRecord(true)
+                    }}
+                  >
+                    New project
+                  </button>
+                )}
               </div>
               {moneyError && <div className="login-error" style={{ marginTop: 8 }}>{moneyError}</div>}
             </div>
@@ -633,13 +771,25 @@ export default function ClientTab({ client }) {
       {showPaymentRecord && (
         <PaymentRecordModal
           client={client}
-          existingDeal={deal}
+          existingDeal={recordMode === 'edit' ? deal : null}
+          mode={recordMode}
           onSkip={() => setShowPaymentRecord(false)}
-          onSaved={async () => {
+          onSaved={async (saved) => {
             setShowPaymentRecord(false)
             await ensureOnboardingSteps()
             await loadAll()
+            if (saved?.id) setSelectedDealId(saved.id)
           }}
+        />
+      )}
+
+      {requestPdf && (
+        <PaymentRequestModal
+          client={requestPdf.client}
+          amount={requestPdf.amount}
+          mode={requestPdf.mode}
+          note={requestPdf.note}
+          onClose={() => setRequestPdf(null)}
         />
       )}
 

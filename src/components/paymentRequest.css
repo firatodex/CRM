@@ -1,0 +1,562 @@
+/* Payment request form (CRM) + A4 capture sheet for PDF */
+
+.payreq-overlay {
+  z-index: 320;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.payreq-dialog {
+  width: min(540px, 100%);
+  max-width: 540px;
+  padding: 24px;
+  max-height: min(92vh, 820px);
+  overflow-y: auto;
+  background: var(--bg-white);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border-light);
+}
+
+.payreq-dialog-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.payreq-dialog-head h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.payreq-dialog-head p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.payreq-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.payreq-live-total {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fff5e9;
+  border: 1px solid #ffd8a2;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.payreq-live-total span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #7c5b2b;
+}
+
+.payreq-live-total strong {
+  font-size: 20px;
+  color: #d65e26;
+}
+
+.payreq-editors {
+  border: 1px dashed #ffb066;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #fff8f0;
+}
+
+.payreq-editors-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 20px;
+  align-items: flex-end;
+}
+
+.payreq-field label,
+.payreq-toggle-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #7c5b2b;
+  margin-bottom: 4px;
+}
+
+.payreq-field input,
+.payreq-payin input {
+  font-size: 13px;
+  font-weight: 650;
+  color: #101c35;
+  border: 1px solid #ffd8a2;
+  border-radius: 6px;
+  padding: 8px 10px;
+  width: 100%;
+  min-width: 0;
+  background: #fff;
+}
+
+.payreq-field {
+  min-width: 120px;
+  flex: 1 1 140px;
+}
+
+.payreq-field input.gst {
+  max-width: 88px;
+}
+
+.payreq-field input:disabled {
+  opacity: 0.5;
+  background: #f2ede6;
+}
+
+.payreq-hint {
+  display: block;
+  color: #9a8264;
+  font-size: 11px;
+  margin-top: 8px;
+}
+
+.payreq-divider {
+  height: 1px;
+  background: #ffe1b8;
+  margin: 12px 0;
+}
+
+.payreq-switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 20px;
+  vertical-align: middle;
+}
+.payreq-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.payreq-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: #cbd3e0;
+  border-radius: 20px;
+  transition: 0.2s;
+}
+.payreq-slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: 0.2s;
+}
+.payreq-switch input:checked + .payreq-slider {
+  background: #ef772f;
+}
+.payreq-switch input:checked + .payreq-slider:before {
+  transform: translateX(18px);
+}
+
+.payreq-chip {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 10px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.payreq-chip.mode { background: #dfe8fb; color: #2b4a91; }
+.payreq-chip.on { background: #d7f2df; color: #1f7a3d; }
+.payreq-chip.off { background: #f1d9d9; color: #a13c3c; }
+
+.payreq-payin-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+  margin-top: 10px;
+}
+
+.payreq-qr-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.payreq-qr-thumb {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid #ffd8a2;
+  border-radius: 6px;
+}
+
+.collection-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+  .payreq-payin-grid {
+    grid-template-columns: 1fr;
+  }
+  .collection-row-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+/* ── A4 capture sheet: 794×1123px (A4 @ 96dpi), matches editable HTML ── */
+.payreq-capture-host {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 794px;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+  overflow: hidden;
+}
+
+.payreq-sheet {
+  width: 794px;
+  height: 1123px; /* exact A4 height at 96dpi — fills PDF page */
+  background: #fff;
+  color: #172033;
+  font-family: Arial, Helvetica, sans-serif;
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.payreq-sheet *,
+.payreq-sheet *::before,
+.payreq-sheet *::after {
+  box-sizing: border-box;
+}
+
+.payreq-top {
+  height: 22px;
+  background: #101c35;
+  flex-shrink: 0;
+}
+
+.payreq-wrap {
+  flex: 1;
+  padding: 32px 40px 32px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.payreq-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  flex-shrink: 0;
+}
+
+.payreq-brand h1 {
+  margin: 0;
+  color: #101c35;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.payreq-brand p {
+  margin: 4px 0 0;
+  color: #6c7890;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  line-height: 1.3;
+}
+
+.payreq-doc {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.payreq-doc h2 {
+  margin: 0;
+  color: #ef772f;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.payreq-doc p {
+  margin: 4px 0 0;
+  color: #748198;
+  font-size: 10px;
+}
+
+.payreq-rule {
+  height: 1px;
+  background: #dce3ed;
+  margin: 24px 0 22px;
+  flex-shrink: 0;
+}
+
+.payreq-intro {
+  flex-shrink: 0;
+}
+
+.payreq-eyebrow {
+  color: #ef772f;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.payreq-title {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.2;
+  color: #101c35;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.payreq-sub {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #69768d;
+  max-width: 560px;
+}
+
+.payreq-hero {
+  margin-top: 24px;
+  border-radius: 10px;
+  padding: 24px 28px;
+  background: #101c35;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.payreq-hero-label {
+  color: #ffc45d;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+}
+
+.payreq-hero-amount {
+  margin-top: 4px;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.payreq-hero-note {
+  margin-top: 4px;
+  color: #c4d0e1;
+  font-size: 11px;
+}
+
+.payreq-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4%;
+  margin-top: 24px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+.payreq-card {
+  border: 1px solid #dce3ed;
+  border-radius: 10px;
+  padding: 18px;
+  background: #fff;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.payreq-card h3 {
+  margin: 0 0 14px;
+  color: #101c35;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.payreq-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  border-bottom: 1px solid #edf0f5;
+  padding: 9px 0;
+  font-size: 11.5px;
+}
+
+.payreq-row:last-child {
+  border-bottom: 0;
+}
+
+.payreq-label {
+  color: #78859a;
+  flex-shrink: 0;
+}
+
+.payreq-value {
+  color: #172033;
+  font-weight: 700;
+  text-align: right;
+  word-break: break-word;
+}
+
+.payreq-total {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: #fff5e9;
+  border: 1px solid #ffd8a2;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.payreq-total span {
+  font-size: 11px;
+  color: #7c5b2b;
+  font-weight: 700;
+  line-height: 22px;
+}
+
+.payreq-total strong {
+  color: #d65e26;
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.payreq-transfer {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #e3e8f0;
+  border-bottom: 0;
+}
+
+.payreq-qr-card {
+  text-align: center;
+  background: #fbfcfe;
+}
+
+.payreq-qr-card h3 {
+  text-align: left;
+}
+
+.payreq-qr-box {
+  width: 180px;
+  height: 180px;
+  margin: 0 auto 12px;
+  background: #111;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.payreq-qr-placeholder {
+  text-align: center;
+  line-height: 1.35;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.payreq-qr-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
+  display: block;
+}
+
+.payreq-qr-caption {
+  color: #69768d;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.payreq-upi {
+  margin-top: auto;
+  padding: 10px;
+  background: #eef3fb;
+  border-radius: 7px;
+  color: #33445f;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.payreq-bank {
+  margin-top: 24px;
+  flex-shrink: 0;
+}
+
+.payreq-footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid #dce3ed;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  color: #8994a6;
+  font-size: 10px;
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+
+.payreq-footer strong {
+  color: #101c35;
+  font-size: 11px;
+}
+
+.payreq-thanks {
+  color: #ef772f;
+  font-weight: 800;
+  white-space: nowrap;
+}

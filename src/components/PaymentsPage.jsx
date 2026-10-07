@@ -15,6 +15,8 @@ import PaymentRecordModal from './PaymentRecordModal'
 import RecordPaymentConfirm from './RecordPaymentConfirm'
 import CollectionQueueList from './CollectionQueueList'
 import PaymentToast from './PaymentToast'
+import PaymentRequestModal from './PaymentRequestModal'
+import { requestDraftFromQueueItem } from '../utils/paymentRequestSettings'
 
 const AGING_CHIPS = [
   { key: 'all', label: 'All due' },
@@ -62,6 +64,7 @@ export default function PaymentsPage({
   const [toast, setToast] = useState(null) // { undo, clientName, amount, label }
   const [toastUndoBusy, setToastUndoBusy] = useState(false)
   const [hiddenKeys, setHiddenKeys] = useState(() => new Set())
+  const [requestPdf, setRequestPdf] = useState(null)
 
   const clientById = useMemo(() => {
     const map = {}
@@ -163,7 +166,7 @@ export default function PaymentsPage({
   }, [payments, deals, clientById, modelFilter, search])
 
   function openEdit(client, deal = null) {
-    setEditPrompt({ client, existingDeal: deal })
+    setEditPrompt({ client, existingDeal: deal, mode: deal ? 'edit' : 'new' })
   }
 
   function askMarkPaid(item) {
@@ -303,6 +306,13 @@ export default function PaymentsPage({
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn btn-primary btn-sm"
+            type="button"
+            onClick={() => setRequestPdf({ client: null, amount: 0, mode: 'general', note: '' })}
+          >
+            New request PDF
+          </button>
           <button className="btn btn-secondary btn-sm" type="button" onClick={() => onExport?.()}>
             Export CSV
           </button>
@@ -431,6 +441,7 @@ export default function PaymentsPage({
           today={today}
           onOpenClient={onOpenClient}
           onMarkPaid={askMarkPaid}
+          onRequestPdf={item => setRequestPdf(requestDraftFromQueueItem(item))}
           busyKey={busyKey}
           emptyTitle={
             collectionQueue.length === 0
@@ -521,12 +532,23 @@ export default function PaymentsPage({
         <PaymentRecordModal
           client={editPrompt.client}
           existingDeal={editPrompt.existingDeal}
+          mode={editPrompt.mode || (editPrompt.existingDeal ? 'edit' : 'new')}
           requirePlan={requirePlan && !editPrompt.existingDeal}
           onSkip={() => setEditPrompt(null)}
           onSaved={() => {
             setEditPrompt(null)
             onRefresh?.()
           }}
+        />
+      )}
+
+      {requestPdf && (
+        <PaymentRequestModal
+          client={requestPdf.client}
+          amount={requestPdf.amount}
+          mode={requestPdf.mode}
+          note={requestPdf.note}
+          onClose={() => setRequestPdf(null)}
         />
       )}
 
@@ -592,9 +614,9 @@ function PlansTable({ rows, today, onOpenClient, onEditPlan }) {
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{client?.name || '—'}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{client?.company || '—'}</div>
               </button>
-              {deal.product_sold && (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{deal.product_sold}</div>
-              )}
+              <div style={{ fontSize: 13, fontWeight: 650, marginTop: 4, color: 'var(--text)' }}>
+                {deal.product_sold || (isRecurring ? 'Recurring plan' : 'One-time plan')}
+              </div>
               <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                 <Pill
                   color={isRecurring ? '#1d4ed8' : '#374151'}

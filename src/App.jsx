@@ -23,6 +23,10 @@ import CustomerHealthDashboard from './components/CustomerHealthDashboard'
 import PaymentRecordModal from './components/PaymentRecordModal'
 import PaymentsPage from './components/PaymentsPage'
 import { getRequirePaymentPlan } from './utils/crmPolicies'
+import { isDealSettled } from './utils/paymentReminders'
+
+/** Flip to true to put Delivery, Health, and Desk back in the top nav. Screens stay wired below. */
+const SHOW_DELIVERY_HEALTH_DESK_NAV = false
 
 // Fallback UUID generator for browsers without crypto.randomUUID (pre-Chrome 92).
 // Produces a valid v4 UUID string, since the contact_log.id column is type uuid
@@ -508,12 +512,25 @@ export default function App() {
   }
 
   async function promptForPayment(client) {
-    const { data: existingDeal } = await supabase
+    const { data: clientDeals } = await supabase
       .from('deals')
       .select('*')
       .eq('client_id', client.id)
-      .maybeSingle()
-    setPaymentPrompt({ client, existingDeal: existingDeal || null })
+      .order('created_at', { ascending: false })
+    const list = clientDeals || []
+    if (!list.length) {
+      setPaymentPrompt({ client, existingDeal: null, mode: 'new' })
+      return
+    }
+    const ids = list.map(d => d.id)
+    const { data: pays } = await supabase.from('payments').select('*').in('deal_id', ids)
+    const open = list.find(d => !isDealSettled(d, pays || []))
+    if (open) {
+      setPaymentPrompt({ client, existingDeal: open, mode: 'edit' })
+    } else {
+      // All settled — start a new project rather than overwrite history
+      setPaymentPrompt({ client, existingDeal: null, mode: 'new' })
+    }
   }
 
   async function handlePaymentRecordSaved(deal) {
@@ -625,12 +642,16 @@ export default function App() {
             Payments
           </button>
           <button className={`nav-btn ${view === 'team' ? 'active' : ''}`} onClick={() => setView('team')}>Team</button>
-          <button className={`nav-btn ${view === 'delivery' ? 'active' : ''}`} onClick={() => setView('delivery')}>Delivery</button>
-          <button className={`nav-btn ${view === 'health' ? 'active' : ''}`} onClick={() => setView('health')}>Health</button>
-          <button className={`nav-btn ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')}>
-            Desk
-            {urgentTaskCount > 0 && <span className="nav-badge red">{urgentTaskCount}</span>}
-          </button>
+          {SHOW_DELIVERY_HEALTH_DESK_NAV && (
+            <>
+              <button className={`nav-btn ${view === 'delivery' ? 'active' : ''}`} onClick={() => setView('delivery')}>Delivery</button>
+              <button className={`nav-btn ${view === 'health' ? 'active' : ''}`} onClick={() => setView('health')}>Health</button>
+              <button className={`nav-btn ${view === 'tasks' ? 'active' : ''}`} onClick={() => setView('tasks')}>
+                Desk
+                {urgentTaskCount > 0 && <span className="nav-badge red">{urgentTaskCount}</span>}
+              </button>
+            </>
+          )}
         </nav>
         <div className="topbar-right">
           {/* Offline sync status — always visible, never silent */}
@@ -849,6 +870,7 @@ export default function App() {
         <PaymentRecordModal
           client={paymentPrompt.client}
           existingDeal={paymentPrompt.existingDeal || null}
+          mode={paymentPrompt.mode || (paymentPrompt.existingDeal ? 'edit' : 'new')}
           requirePlan={requirePaymentPlan && !paymentPrompt.existingDeal}
           onSkip={() => {
             if (requirePaymentPlan && !paymentPrompt.existingDeal) {

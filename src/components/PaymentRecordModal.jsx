@@ -27,12 +27,16 @@ function numOrEmpty(v) {
 export default function PaymentRecordModal({
   client,
   existingDeal = null,
+  /** 'new' = always insert; 'edit' = update existingDeal. Defaults from existingDeal. */
+  mode = null,
   onSkip,
   onSaved,
   onError,
   requirePlan = false,
 }) {
   const today = todayStr()
+  const isEdit = mode === 'edit' || (!mode && !!existingDeal?.id)
+  const isNew = !isEdit
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -336,7 +340,6 @@ export default function PaymentRecordModal({
 
       const dealRow = {
         client_id: client.id,
-        company: client.company || null,
         stage: 'active',
         product_sold: data.product_sold,
         pricing_model: data.pricing_model,
@@ -361,7 +364,7 @@ export default function PaymentRecordModal({
       }
 
       let deal
-      if (existingDeal?.id) {
+      if (isEdit && existingDeal?.id) {
         const { data: updated, error: upErr } = await supabase
           .from('deals')
           .update(dealRow)
@@ -371,29 +374,14 @@ export default function PaymentRecordModal({
         if (upErr) throw upErr
         deal = updated
       } else {
-        const { data: existing } = await supabase
+        // Always insert a new deal for New project / first plan — never hijack another deal.
+        const { data: inserted, error: inErr } = await supabase
           .from('deals')
-          .select('id')
-          .eq('client_id', client.id)
-          .maybeSingle()
-        if (existing?.id) {
-          const { data: updated, error: upErr } = await supabase
-            .from('deals')
-            .update(dealRow)
-            .eq('id', existing.id)
-            .select()
-            .single()
-          if (upErr) throw upErr
-          deal = updated
-        } else {
-          const { data: inserted, error: inErr } = await supabase
-            .from('deals')
-            .insert(dealRow)
-            .select()
-            .single()
-          if (inErr) throw inErr
-          deal = inserted
-        }
+          .insert(dealRow)
+          .select()
+          .single()
+        if (inErr) throw inErr
+        deal = inserted
       }
 
       // First-month extra (recurring) — upsert so edits stay in sync
@@ -506,7 +494,7 @@ export default function PaymentRecordModal({
       <div className="modal-box" style={{ maxWidth: 480, padding: 28, maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ marginBottom: 18 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
-            {existingDeal ? 'Update payment record' : 'Record deal close'}
+            {isEdit ? 'Update payment record' : 'New project'}
           </div>
           <div style={{ fontSize: 17, fontWeight: 700 }}>{client.name}</div>
           {client.company && (
@@ -748,10 +736,10 @@ export default function PaymentRecordModal({
             </button>
           )}
           <button className="btn btn-primary" style={{ flex: 1 }} type="button" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : existingDeal ? 'Update record' : 'Save payment record'}
+            {saving ? 'Saving…' : isEdit ? 'Update record' : 'Save payment record'}
           </button>
         </div>
-        {requirePlan && !existingDeal && (
+        {requirePlan && isNew && (
           <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
             Payment record is required for Active clients (policy enabled).
           </div>

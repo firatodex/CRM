@@ -4,6 +4,8 @@ import ClientCard from './ClientCard'
 import CollectionQueueList from './CollectionQueueList'
 import RecordPaymentConfirm from './RecordPaymentConfirm'
 import PaymentToast from './PaymentToast'
+import PaymentRequestModal from './PaymentRequestModal'
+import { requestDraftFromQueueItem } from '../utils/paymentRequestSettings'
 import { todayStr } from '../utils'
 import {
   buildCollectionQueue,
@@ -101,6 +103,7 @@ export default function TodayView({
   const [toast, setToast] = useState(null)
   const [toastUndoBusy, setToastUndoBusy] = useState(false)
   const [hiddenKeys, setHiddenKeys] = useState(() => new Set())
+  const [requestPdf, setRequestPdf] = useState(null)
 
   const pipeline = clients.filter(c => !['active', 'dead'].includes(c.stage))
   const dueLeads = pipeline.filter(c => c.next_action_due && c.next_action_due <= today)
@@ -231,6 +234,7 @@ export default function TodayView({
             today={today}
             onOpenClient={onCardClick}
             onMarkPaid={askMarkPaid}
+            onRequestPdf={item => setRequestPdf(requestDraftFromQueueItem(item))}
             busyKey={busyKey}
             compact
             maxHeight={220}
@@ -253,6 +257,16 @@ export default function TodayView({
           />
         ))}
       </div>
+
+      {requestPdf && (
+        <PaymentRequestModal
+          client={requestPdf.client}
+          amount={requestPdf.amount}
+          mode={requestPdf.mode}
+          note={requestPdf.note}
+          onClose={() => setRequestPdf(null)}
+        />
+      )}
 
       <RecordPaymentConfirm
         open={!!confirm}

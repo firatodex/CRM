@@ -29,58 +29,6 @@ function toISTDateStr(contactedAtString) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════
-// SECTION: URGENCY ALERTS (OPERATIONAL FOCUS)
-// ════════════════════════════════════════════════════════════════════════════════════════
-function UrgencyAlerts({ clients }) {
-  const today = todayStr()
-  const pipeline = clients.filter(c => !['active', 'dead'].includes(c.stage))
-
-  // Overdue / urgent indicators
-  const overdue = pipeline.filter(c => c.next_action_due && c.next_action_due < today).length
-  const dueToday = pipeline.filter(c => c.next_action_due === today).length
-  const stale = pipeline.filter(c => {
-    if (!c.last_contacted_at) return true
-    const lastContactDatePart = c.last_contacted_at.split('T')[0]
-    const [year, month, day] = lastContactDatePart.split('-').map(Number)
-    const lastContactDate = new Date(year, month - 1, day)
-    const daysAgo = Math.floor((new Date() - lastContactDate) / (1000 * 60 * 60 * 24))
-    return daysAgo >= 7
-  }).length
-  const noAction = pipeline.filter(c => !c.next_action).length
-
-  const urgencyTotal = overdue + dueToday + stale + noAction
-
-  return (
-    <div className="urgency-alerts">
-      <div className="urgency-title">⚠️ Attention Required</div>
-      <div className="alert-list">
-        <div className={`alert-item ${overdue > 0 ? 'alert-red' : 'alert-green'}`}>
-          <span className="alert-count">{overdue}</span>
-          <span className="alert-text">Overdue follow-ups</span>
-        </div>
-        <div className={`alert-item ${dueToday > 0 ? 'alert-orange' : 'alert-green'}`}>
-          <span className="alert-count">{dueToday}</span>
-          <span className="alert-text">Due today</span>
-        </div>
-        <div className={`alert-item ${stale > 0 ? 'alert-orange' : 'alert-green'}`}>
-          <span className="alert-count">{stale}</span>
-          <span className="alert-text">Stale (7d+ no contact)</span>
-        </div>
-        <div className={`alert-item ${noAction > 0 ? 'alert-orange' : 'alert-green'}`}>
-          <span className="alert-count">{noAction}</span>
-          <span className="alert-text">No next action set</span>
-        </div>
-      </div>
-      {urgencyTotal > 0 && (
-        <div style={{ marginTop: 12, padding: '10px 12px', background: 'rgba(255, 59, 48, 0.08)', borderRadius: 6, fontSize: 12, color: '#FF3B30', fontWeight: 500 }}>
-          {urgencyTotal} item{urgencyTotal !== 1 ? 's' : ''} need{urgencyTotal !== 1 ? '' : 's'} attention
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ════════════════════════════════════════════════════════════════════════════════════════
 // SECTION: PIPELINE FUNNEL (CONVERSION VISUALIZATION)
 // ════════════════════════════════════════════════════════════════════════════════════════
 function PipelineFunnel({ clients }) {
@@ -1217,9 +1165,6 @@ export default function DashboardRedesign({ clients = [], contactLogs = [], deal
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '24px' }}>
-      {/* Section 0: Urgency Alerts (operational focus) */}
-      <UrgencyAlerts clients={clients} />
-
       {/* Section 1: Business Scoreboard */}
       <BusinessScoreboard clients={clients} deals={deals} payments={payments} />
 

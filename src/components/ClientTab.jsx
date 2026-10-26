@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import { supabase } from '../supabase'
-import { formatCurrency, todayStr } from '../utils'
+import { formatCurrency, todayStr, addDays } from '../utils'
 import PaymentRecordModal from './PaymentRecordModal'
 import RecordPaymentConfirm from './RecordPaymentConfirm'
 import PaymentToast from './PaymentToast'
@@ -21,12 +21,6 @@ const DEFAULT_ONBOARDING_STEPS = [
   'Go-live',
   'Client handoff',
 ]
-
-function addDays(date, n) {
-  const d = new Date(date)
-  d.setDate(d.getDate() + n)
-  return d.toISOString().slice(0, 10)
-}
 
 function formatDisplayDate(iso) {
   if (!iso) return '—'

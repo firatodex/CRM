@@ -1,20 +1,9 @@
 import { useMemo, useState } from 'react'
 import { TASK_TYPES } from '../stages'
-import { todayStr } from '../utils'
+import { todayStr, addDays } from '../utils'
 import { AddTaskForm } from './TasksView'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-
-function isoDate(d) {
-  return d.toISOString().slice(0, 10)
-}
-
-function addDays(dateStr, n) {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const ms = Date.UTC(y, m - 1, d + n, 12, 0, 0)
-  const dt = new Date(ms)
-  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`
-}
 
 function timeToMinutes(t) {
   if (!t) return null
@@ -39,26 +28,11 @@ function taskTypeInfo(type) {
 function MiniCalendar({ selectedDate, onSelectDate, itemsByDate }) {
   const today = todayStr()
 
-  // Show 5 weeks starting from the Monday on or before today.
-  // We use a known Monday anchor (2000-01-03 was a Monday) and compute
-  // weeks elapsed since then — completely avoids getDay() timezone issues.
+  // Show 5 weeks starting from the Monday on or before today (local dates only).
   const start = useMemo(() => {
-    // Use UTC noon to avoid timezone date-flip issues (e.g. IST +5:30 where
-    // T00:00:00Z = previous local day). 2000-01-03T12:00:00Z is unambiguously
-    // Monday January 3 2000 in every timezone from UTC-12 to UTC+14.
-    const KNOWN_MONDAY_NOON = new Date('2000-01-03T12:00:00Z').getTime()
-    const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000
-    // Parse today's date parts from local time (todayStr uses local getDate/Month/Year)
-    const [y, mo, d] = today.split('-').map(Number)
-    const todayNoonMs = Date.UTC(y, mo - 1, d, 12, 0, 0)
-    const weeksSince = Math.floor((todayNoonMs - KNOWN_MONDAY_NOON) / MS_PER_WEEK)
-    const mondayNoonMs = KNOWN_MONDAY_NOON + weeksSince * MS_PER_WEEK
-    // Convert back to a date string using UTC date parts at that noon timestamp
-    const mondayDate = new Date(mondayNoonMs)
-    const my = mondayDate.getUTCFullYear()
-    const mm = String(mondayDate.getUTCMonth() + 1).padStart(2, '0')
-    const md = String(mondayDate.getUTCDate()).padStart(2, '0')
-    return `${my}-${mm}-${md}`
+    const [y, m, d] = today.split('-').map(Number)
+    const daysSinceMonday = (new Date(y, m - 1, d).getDay() + 6) % 7
+    return addDays(today, -daysSinceMonday)
   }, [today])
 
   const weeks = useMemo(() => {

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { getLeadIntelligence, parseCallNote } from '../gemini'
+import { daysFromToday } from '../utils'
 
 // ─── Urgency badge ────────────────────────────────────────────────
 function UrgencyBadge({ level }) {
@@ -98,9 +99,7 @@ export function SmartNoteDumper({ client, contactLogs, onApply }) {
     // Build due date from suggested_due_date_days
     let dueDate = null
     if (result.suggested_due_date_days) {
-      const d = new Date()
-      d.setDate(d.getDate() + result.suggested_due_date_days)
-      dueDate = d.toISOString().split('T')[0]
+      dueDate = daysFromToday(result.suggested_due_date_days)
     }
     onApply({
       whatHappened: result.what_happened || raw,

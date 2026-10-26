@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { ALL_STAGES, TEMPERATURES, SOURCES, TASK_TYPES } from '../stages'
-import { waLink, formatDateTime, todayStr, formatPhoneDisplay } from '../utils'
+import { waLink, formatDateTime, todayStr, formatPhoneDisplay, daysFromToday } from '../utils'
 import LeadIntelligencePanel, { SmartNoteDumper } from './LeadIntelligencePanel'
 import ClientTab from './ClientTab'
 import { supabase } from '../supabase'
@@ -118,15 +118,6 @@ function LeadContactsSection({ clientId }) {
 }
 
 const LOG_METHODS = ['Phone call', 'WhatsApp', 'Email', 'In person']
-
-function quickDate(daysFromNow) {
-  const d = new Date()
-  d.setDate(d.getDate() + daysFromNow)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
 
 const RIGHT_TABS = ['Log', 'History', 'Discovery']
 
@@ -675,9 +666,9 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                     <div className="field">
                       <label style={{ fontSize: 12, color: 'var(--text2)' }}>Due date</label>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <button className={`quick-date-btn ${logDue === quickDate(0) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(0))}>Today</button>
-                        <button className={`quick-date-btn ${logDue === quickDate(1) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(1))}>Tomorrow</button>
-                        <button className={`quick-date-btn ${logDue === quickDate(7) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(7))}>+7 days</button>
+                        <button className={`quick-date-btn ${logDue === daysFromToday(0) ? 'active' : ''}`} onClick={() => setLogDue(daysFromToday(0))}>Today</button>
+                        <button className={`quick-date-btn ${logDue === daysFromToday(1) ? 'active' : ''}`} onClick={() => setLogDue(daysFromToday(1))}>Tomorrow</button>
+                        <button className={`quick-date-btn ${logDue === daysFromToday(7) ? 'active' : ''}`} onClick={() => setLogDue(daysFromToday(7))}>+7 days</button>
                         <input type="date" value={logDue} onChange={e => setLogDue(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
                         {logDue && (
                           <input
@@ -731,9 +722,9 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                     <div className="field">
                       <label style={{ fontSize: 12, color: 'var(--text2)' }}>Due date</label>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <button className={`quick-date-btn ${logDue === quickDate(0) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(0))}>Today</button>
-                        <button className={`quick-date-btn ${logDue === quickDate(1) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(1))}>Tomorrow</button>
-                        <button className={`quick-date-btn ${logDue === quickDate(7) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(7))}>+7 days</button>
+                        <button className={`quick-date-btn ${logDue === daysFromToday(0) ? 'active' : ''}`} onClick={() => setLogDue(daysFromToday(0))}>Today</button>
+                        <button className={`quick-date-btn ${logDue === daysFromToday(1) ? 'active' : ''}`} onClick={() => setLogDue(daysFromToday(1))}>Tomorrow</button>
+                        <button className={`quick-date-btn ${logDue === daysFromToday(7) ? 'active' : ''}`} onClick={() => setLogDue(daysFromToday(7))}>+7 days</button>
                         <input type="date" value={logDue} onChange={e => setLogDue(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
                         {logDue && (
                           <input

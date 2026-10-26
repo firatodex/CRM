@@ -1,13 +1,38 @@
-// Returns today's date as YYYY-MM-DD in LOCAL time (not UTC).
-// Previously used toISOString() which returns UTC — in IST (UTC+5:30)
-// this caused "today" to flip to tomorrow after 6:30 PM, hiding overdue items.
-export function todayStr() {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+// ── Dates ───────────────────────────────────────────────────────────────────
+// All dates are YYYY-MM-DD strings in LOCAL (IST) time. Never use toISOString()
+// for a calendar date: it converts to UTC, which in IST shifts the day by one
+// before 5:30 AM / for midnight dates and after 6:30 PM for "now".
+
+/** Date object → 'YYYY-MM-DD' using local date parts. */
+export function toDateStr(date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
+
+/** Today as 'YYYY-MM-DD' (local). */
+export function todayStr() {
+  return toDateStr(new Date())
+}
+
+/** 'YYYY-MM-DD' + n calendar days (n may be negative). */
+export function addDays(dateStr, n) {
+  const [y, m, d] = String(dateStr).split('-').map(Number)
+  return toDateStr(new Date(y, m - 1, d + Number(n)))
+}
+
+/** Today + n days as 'YYYY-MM-DD'. */
+export function daysFromToday(n) {
+  return addDays(todayStr(), n)
+}
+
+/** Date part of a stored timestamp ("2026-08-12T18:34:15+05:30" → "2026-08-12"). */
+export function datePart(timestamp) {
+  return timestamp ? String(timestamp).split('T')[0] : null
+}
+
+// ── Formatting ──────────────────────────────────────────────────────────────
 
 export function formatDue(due) {
   if (!due) return null

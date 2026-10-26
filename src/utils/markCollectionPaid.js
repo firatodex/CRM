@@ -1,5 +1,5 @@
 import { supabase } from '../supabase'
-import { todayStr } from '../utils'
+import { todayStr } from './index'
 import { completePaymentReminder } from './paymentReminders'
 
 /**

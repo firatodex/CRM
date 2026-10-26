@@ -3,30 +3,8 @@ import {
   ComposedChart, Bar, Scatter, BarChart, Cell
 } from 'recharts'
 import { useMemo } from 'react'
-import { formatCurrency, todayStr } from '../utils'
+import { formatCurrency, todayStr, toDateStr, datePart } from '../utils'
 import { PIPELINE_STAGES } from '../stages'
-
-// ════════════════════════════════════════════════════════════════════════════════════════
-// HELPER: Format date for display
-// ════════════════════════════════════════════════════════════════════════════════════════
-function toLocalDateStr(date) {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const dd = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${dd}`
-}
-
-// ════════════════════════════════════════════════════════════════════════════════════════
-// HELPER: Convert UTC to IST date string
-// ════════════════════════════════════════════════════════════════════════════════════════
-function toISTDateStr(contactedAtString) {
-  // Database stores timestamps as: "2026-08-12T18:34:15.287+05:30"
-  // The date part is already in IST! Just extract it.
-  // No need to create Date objects or add/subtract offsets.
-  if (!contactedAtString) return null
-  const datePart = contactedAtString.split('T')[0]  // "2026-08-12"
-  return datePart
-}
 
 // ════════════════════════════════════════════════════════════════════════════════════════
 function MetricCard({ label, value, comparison, color = 'var(--text-dark)', trend = null, borderColor = 'var(--primary)' }) {
@@ -557,7 +535,7 @@ function ContactActivityGraph({ contactLogs }) {
   const contactsByISTDate = {}
   contactLogs.forEach(l => {
     if (!l.contacted_at) return
-    const istDateStr = toISTDateStr(l.contacted_at)
+    const istDateStr = datePart(l.contacted_at)
     if (!istDateStr) return
     contactsByISTDate[istDateStr] = (contactsByISTDate[istDateStr] || 0) + 1
   })
@@ -572,10 +550,7 @@ function ContactActivityGraph({ contactLogs }) {
     dateObj.setDate(dateObj.getDate() - i)
     
     // Create IST date string (YYYY-MM-DD)
-    const y = dateObj.getFullYear()
-    const m = String(dateObj.getMonth() + 1).padStart(2, '0')
-    const dd = String(dateObj.getDate()).padStart(2, '0')
-    const istDateStr = `${y}-${m}-${dd}`
+    const istDateStr = toDateStr(dateObj)
     
     rawCounts.push({
       localDate: istDateStr,
@@ -960,7 +935,7 @@ function BottleneckAnalysis({ clients, contactLogs }) {
   }
 
   // Overdue follow-ups
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayStr()
   const overdue = clients.filter(c => 
     !['active', 'dead'].includes(c.stage) && 
     c.next_action_due && 

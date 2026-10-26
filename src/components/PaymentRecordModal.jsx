@@ -15,7 +15,7 @@ import {
   roundMoney,
   syncMonthlyAndTotal,
 } from '../utils/paymentMath'
-import { formatCurrency, todayStr } from '../utils'
+import { formatCurrency, todayStr, addDays } from '../utils'
 
 const inputStyle = { width: '100%' }
 
@@ -465,14 +465,7 @@ export default function PaymentRecordModal({
             client_id: client.id,
             step_order: i,
             step_label,
-            due_date: (() => {
-              const d = new Date(start + 'T00:00:00')
-              d.setDate(d.getDate() + i * 7)
-              const y = d.getFullYear()
-              const m = String(d.getMonth() + 1).padStart(2, '0')
-              const day = String(d.getDate()).padStart(2, '0')
-              return `${y}-${m}-${day}`
-            })(),
+            due_date: addDays(start, i * 7),
           }))
         )
       }

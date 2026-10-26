@@ -5,7 +5,7 @@ import {
   monthsForCadence,
   periodEnd,
 } from './paymentMath'
-import { todayStr } from '../utils'
+import { todayStr } from './index'
 
 /**
  * Mark a recurring payment reminder done:

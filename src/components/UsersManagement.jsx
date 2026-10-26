@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../supabase'
+import { listUsers, insertUser, updateUser } from '../api/users'
 
 export default function UsersManagement() {
   const [users, setUsers] = useState([])
@@ -21,10 +21,7 @@ export default function UsersManagement() {
   async function loadUsers() {
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const { data, error } = await listUsers()
       
       if (error) throw error
       setUsers(data || [])
@@ -44,15 +41,10 @@ export default function UsersManagement() {
 
     try {
       if (editingUser) {
-        const { error } = await supabase
-          .from('users')
-          .update(formData)
-          .eq('id', editingUser.id)
+        const { error } = await updateUser(editingUser.id, formData)
         if (error) throw error
       } else {
-        const { error } = await supabase
-          .from('users')
-          .insert([formData])
+        const { error } = await insertUser(formData)
         if (error) throw error
       }
       
@@ -87,10 +79,7 @@ export default function UsersManagement() {
   async function deactivateUser(userId) {
     if (!window.confirm('Deactivate this user?')) return
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({ is_active: false })
-        .eq('id', userId)
+      const { error } = await updateUser(userId, { is_active: false })
       if (error) throw error
       loadUsers()
     } catch (err) {

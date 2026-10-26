@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { supabase } from '../supabase'
+import { markPaymentUnpaid } from '../api/payments'
 import { formatCurrency, todayStr } from '../utils'
 import { CADENCE_OPTIONS, cadenceLabel } from '../utils/paymentMath'
 import {
@@ -191,10 +191,7 @@ export default function PaymentsPage({
     setActionError(null)
     setStatusBusyId(payment.id)
     try {
-      const { error } = await supabase
-        .from('payments')
-        .update({ paid: false, paid_at: null })
-        .eq('id', payment.id)
+      const { error } = await markPaymentUnpaid(payment.id)
       if (error) throw error
       onRefresh?.()
     } catch (err) {

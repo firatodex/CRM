@@ -1,6 +1,8 @@
 import { useMemo, useState, useEffect } from 'react'
-import { supabase } from '../supabase'
-import { formatCurrency, todayStr, addDays } from '../utils'
+import { formatCurrency, todayStr } from '../utils'
+import { listDealsForClient, patchDeal } from '../api/deals'
+import { listPaymentsForDealsByCreated, insertPaymentReturning, patchPayment, deletePayment } from '../api/payments'
+import { listOnboardingSteps, insertDefaultOnboardingSteps, updateOnboardingStep } from '../api/onboarding'
 import PaymentRecordModal from './PaymentRecordModal'
 import RecordPaymentConfirm from './RecordPaymentConfirm'
 import PaymentToast from './PaymentToast'
@@ -13,14 +15,6 @@ import {
 } from '../utils/collectionQueue'
 import { markCollectionItemPaid, undoMarkCollectionPaid } from '../utils/markCollectionPaid'
 import { isDealSettled, pickOpenOrNewestDeal } from '../utils/paymentReminders'
-
-const DEFAULT_ONBOARDING_STEPS = [
-  'Onboarding call',
-  'Setup & data migration',
-  'Training session',
-  'Go-live',
-  'Client handoff',
-]
 
 function formatDisplayDate(iso) {
   if (!iso) return '—'
@@ -58,18 +52,14 @@ export default function ClientTab({ client }) {
   async function loadAll() {
     setLoading(true)
     const [{ data: dealRows }, { data: s }] = await Promise.all([
-      supabase.from('deals').select('*').eq('client_id', client.id).order('created_at', { ascending: false }),
-      supabase.from('onboarding_steps').select('*').eq('client_id', client.id).order('step_order'),
+      listDealsForClient(client.id),
+      listOnboardingSteps(client.id),
     ])
     const list = dealRows || []
     setDeals(list)
     if (list.length) {
       const ids = list.map(d => d.id)
-      const { data: p } = await supabase
-        .from('payments')
-        .select('*')
-        .in('deal_id', ids)
-        .order('created_at')
+      const { data: p } = await listPaymentsForDealsByCreated(ids)
       const pays = p || []
       setAllPayments(pays)
       setSelectedDealId(prev => {
@@ -96,26 +86,19 @@ export default function ClientTab({ client }) {
   async function ensureOnboardingSteps() {
     if (onboarding.length > 0) return
     const today = todayStr()
-    await supabase.from('onboarding_steps').insert(
-      DEFAULT_ONBOARDING_STEPS.map((label, i) => ({
-        client_id: client.id,
-        step_order: i,
-        step_label: label,
-        due_date: addDays(today, i * 7),
-      }))
-    )
+    await insertDefaultOnboardingSteps(client.id, today)
   }
 
   async function markDelivered() {
     if (!deal) return
     const today = todayStr()
-    await supabase.from('deals').update({ delivery_status: true, delivered_at: today }).eq('id', deal.id)
+    await patchDeal(deal.id, { delivery_status: true, delivered_at: today })
     setDeals(prev => prev.map(d => d.id === deal.id ? { ...d, delivery_status: true, delivered_at: today } : d))
   }
 
   async function unmarkDelivered() {
     if (!deal) return
-    await supabase.from('deals').update({ delivery_status: false, delivered_at: null }).eq('id', deal.id)
+    await patchDeal(deal.id, { delivery_status: false, delivered_at: null })
     setDeals(prev => prev.map(d => d.id === deal.id ? { ...d, delivery_status: false, delivered_at: null } : d))
   }
 
@@ -235,14 +218,14 @@ export default function ClientTab({ client }) {
     setMoneyError(null)
     try {
       const isCredit = kind === 'credit'
-      const { data, error } = await supabase.from('payments').insert({
+      const { data, error } = await insertPaymentReturning({
         deal_id: deal.id,
         label: isCredit ? 'Credit note' : kind === 'partial' ? 'Partial payment' : 'Adjustment',
         amount: 0,
         due_date: today,
         paid: false,
         kind: 'adjustment',
-      }).select().single()
+      })
       if (error) throw error
       if (data) setAllPayments(prev => [...prev, data])
       setShowAdjustments(true)
@@ -256,25 +239,25 @@ export default function ClientTab({ client }) {
   async function updateAdjustment(id, field, value) {
     const updated = { [field]: field === 'amount' ? Number(value) : value }
     setAllPayments(prev => prev.map(p => p.id === id ? { ...p, ...updated } : p))
-    await supabase.from('payments').update(updated).eq('id', id)
+    await patchPayment(id, updated)
   }
 
-  async function deletePayment(id) {
-    await supabase.from('payments').delete().eq('id', id)
+  async function removePayment(id) {
+    await deletePayment(id)
     setAllPayments(prev => prev.filter(p => p.id !== id))
   }
 
   async function toggleStep(step) {
     const completed = !step.completed
-    await supabase.from('onboarding_steps').update({
+    await updateOnboardingStep(step.id, {
       completed,
       completed_at: completed ? new Date().toISOString() : null,
-    }).eq('id', step.id)
+    })
     setOnboarding(prev => prev.map(s => s.id === step.id ? { ...s, completed, completed_at: completed ? new Date().toISOString() : null } : s))
   }
 
   async function updateStep(id, field, value) {
-    await supabase.from('onboarding_steps').update({ [field]: value }).eq('id', id)
+    await updateOnboardingStep(id, { [field]: value })
     setOnboarding(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s))
   }
 
@@ -623,7 +606,7 @@ export default function ClientTab({ client }) {
                           />
                           <button
                             type="button"
-                            onClick={() => deletePayment(p.id)}
+                            onClick={() => removePayment(p.id)}
                             style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13 }}
                             title="Remove"
                           >

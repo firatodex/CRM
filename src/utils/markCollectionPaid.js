@@ -1,4 +1,5 @@
-import { supabase } from '../supabase'
+import { markPaymentPaid, markPaymentUnpaid } from '../api/payments'
+import { patchDeal } from '../api/deals'
 import { todayStr } from './index'
 import { completePaymentReminder } from './paymentReminders'
 
@@ -20,10 +21,7 @@ export async function markCollectionItemPaid(item, today = todayStr()) {
   }
 
   if (item.kind === 'invoice' && item.payment?.id) {
-    const { error } = await supabase
-      .from('payments')
-      .update({ paid: true, paid_at: today })
-      .eq('id', item.payment.id)
+    const { error } = await markPaymentPaid(item.payment.id, today)
     if (error) throw error
     return {
       type: 'invoice',
@@ -65,27 +63,18 @@ export async function undoMarkCollectionPaid(undo) {
   if (!undo) throw new Error('Nothing to undo')
 
   if (undo.kind === 'invoice' && undo.paymentId) {
-    const { error } = await supabase
-      .from('payments')
-      .update({ paid: false, paid_at: null })
-      .eq('id', undo.paymentId)
+    const { error } = await markPaymentUnpaid(undo.paymentId)
     if (error) throw error
     return
   }
 
   if (undo.kind === 'renewal') {
     if (undo.paymentId) {
-      const { error } = await supabase
-        .from('payments')
-        .update({ paid: false, paid_at: null })
-        .eq('id', undo.paymentId)
+      const { error } = await markPaymentUnpaid(undo.paymentId)
       if (error) throw error
     }
     if (undo.dealId && undo.previousNextReminderAt) {
-      const { error } = await supabase
-        .from('deals')
-        .update({ next_reminder_at: undo.previousNextReminderAt })
-        .eq('id', undo.dealId)
+      const { error } = await patchDeal(undo.dealId, { next_reminder_at: undo.previousNextReminderAt })
       if (error) throw error
     }
     return

@@ -743,13 +743,10 @@ export default function App() {
         ) : view === 'today' ? (
           <TodayView
             clients={clients}
-            deals={deals}
-            payments={payments}
             onCardClick={setSelected}
             onDragStart={setDraggedClient}
             draggedClient={draggedClient}
             onDrop={handleDrop}
-            onPaymentReminderDone={() => { fetchDeals(); fetchPayments() }}
           />
         ) : view === 'dashboard' ? (
           <DashboardRedesign clients={clients} contactLogs={contactLogs} deals={deals} payments={payments} pipelineSnapshots={pipelineSnapshots} />

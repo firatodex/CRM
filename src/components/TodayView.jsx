@@ -75,13 +75,10 @@ function TodayColumn({ stage, clients, onCardClick, draggedClient, onDragStart, 
 
 export default function TodayView({
   clients,
-  deals = [],
-  payments = [],
   onCardClick,
   onDragStart,
   draggedClient,
   onDrop,
-  onPaymentReminderDone,
 }) {
   const today = todayStr()
 

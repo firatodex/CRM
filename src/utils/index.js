@@ -1,0 +1,134 @@
+// ── Dates ───────────────────────────────────────────────────────────────────
+// All dates are YYYY-MM-DD strings in LOCAL (IST) time. Never use toISOString()
+// for a calendar date: it converts to UTC, which in IST shifts the day by one
+// before 5:30 AM / for midnight dates and after 6:30 PM for "now".
+
+/** Date object → 'YYYY-MM-DD' using local date parts. */
+export function toDateStr(date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+/** Today as 'YYYY-MM-DD' (local). */
+export function todayStr() {
+  return toDateStr(new Date())
+}
+
+/** 'YYYY-MM-DD' + n calendar days (n may be negative). */
+export function addDays(dateStr, n) {
+  const [y, m, d] = String(dateStr).split('-').map(Number)
+  return toDateStr(new Date(y, m - 1, d + Number(n)))
+}
+
+/** Today + n days as 'YYYY-MM-DD'. */
+export function daysFromToday(n) {
+  return addDays(todayStr(), n)
+}
+
+/** Date part of a stored timestamp ("2026-08-12T18:34:15+05:30" → "2026-08-12"). */
+export function datePart(timestamp) {
+  return timestamp ? String(timestamp).split('T')[0] : null
+}
+
+// ── Formatting ──────────────────────────────────────────────────────────────
+
+export function formatDue(due) {
+  if (!due) return null
+  const d = new Date(due + 'T00:00:00')
+  const diff = Math.round((d - new Date(todayStr() + 'T00:00:00')) / 86400000)
+  if (diff < 0) return { label: `Overdue by ${Math.abs(diff)}d`, cls: 'overdue' }
+  if (diff === 0) return { label: 'Due today', cls: 'today' }
+  if (diff === 1) return { label: 'Due tomorrow', cls: 'tomorrow' }
+  if (diff <= 7) return { label: `Due in ${diff}d`, cls: '' }
+  return { label: 'Due ' + d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }), cls: '' }
+}
+
+export function formatRelativeTime(dateStr) {
+  if (!dateStr) return null
+  const d = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now - d
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return 'Just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+}
+
+// Full date + time for contact history log entries
+export function formatDateTime(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) +
+    ' · ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+}
+
+export function formatCurrency(amount) {
+  if (amount === null || amount === undefined || amount === '') return '—'
+  const num = Number(amount)
+  if (isNaN(num)) return '—'
+  if (num === 0) return '₹0'
+  const sign = num < 0 ? '-' : ''
+  const abs = Math.abs(num)
+  if (abs >= 100000) return sign + '₹' + (abs / 100000).toFixed(abs % 100000 === 0 ? 0 : 1) + 'L'
+  if (abs >= 1000) return sign + '₹' + (abs / 1000).toFixed(abs % 1000 === 0 ? 0 : 1) + 'K'
+  return sign + '₹' + abs.toLocaleString('en-IN')
+}
+
+// Build a WhatsApp link from a phone number.
+// Strips all non-digits, then prepends 91 only if the number doesn't already
+// start with the India country code — previously it blindly prepended 91 every
+// time, producing wa.me/9191... for numbers already entered with the country code.
+export function waLink(phone) {
+  if (!phone) return null
+  const digits = phone.replace(/\D/g, '')
+  if (!digits) return null
+  // If already starts with 91 and is 12 digits (91 + 10-digit mobile), use as-is
+  // If it's a 10-digit number, prepend 91
+  // Otherwise pass through as-is (handles +1, +44, etc. entered without +)
+  let normalized = digits
+  if (digits.length === 10) {
+    normalized = '91' + digits
+  }
+  return `https://web.whatsapp.com/send?phone=${normalized}&text=`
+}
+
+// Display-only formatter: groups a 10-digit Indian mobile number as "XXXXX XXXXX"
+// for visual scanning and easy dialing. Strips a leading +91/91/0 country/trunk
+// prefix if present. Does NOT mutate stored data — purely cosmetic on render.
+// Numbers that aren't a clean 10-digit Indian mobile (e.g. international numbers,
+// landlines with extensions) are returned unchanged so nothing is misrepresented.
+export function formatPhoneDisplay(phone) {
+  if (!phone) return phone
+  const digits = phone.replace(/\D/g, '')
+  let core = digits
+  if (core.length === 12 && core.startsWith('91')) core = core.slice(2)
+  else if (core.length === 11 && core.startsWith('0')) core = core.slice(1)
+  if (core.length === 10) {
+    return `${core.slice(0, 5)} ${core.slice(5)}`
+  }
+  return phone
+}
+
+export function exportCSV(clients) {
+  const headers = ['Name','Company','Phone','Email','Stage','Temperature','Source','Potential Revenue','Pain Point','Website','Last Contacted','Notes']
+  const rows = clients.map(c => [
+    c.name, c.company, c.phone, c.email, c.stage, c.temperature, c.source,
+    c.potential_revenue, c.pain_point, c.website, c.last_contacted_at, c.notes
+  ].map(v => `"${(v ?? '').toString().replace(/"/g, '""')}"`))
+  // CRLF row endings so Excel renders embedded newlines within quoted fields correctly
+  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `dyzen-solar-leads-${todayStr()}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}

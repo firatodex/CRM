@@ -20,12 +20,7 @@ async function callBackend(body) {
   return data.result
 }
 
-// Feature 1: Full lead intelligence report
-export async function getLeadIntelligence(client, contactLogs) {
-  return await callBackend({ feature: 'intelligence', client, contactLogs })
-}
-
-// Feature 2: Parse raw call notes into structured fields
+// Parse raw call notes into structured fields
 export async function parseCallNote(rawNote, client, contactLogs) {
   try {
     return await callBackend({ feature: 'parse', client, contactLogs, rawNote })

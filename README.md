@@ -37,9 +37,8 @@ Fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 
 ### 3. Database
 
-**Fresh install:** Run `schema.sql` in Supabase → SQL Editor.
+**Database:** schema lives in `supabase/migrations/` (applied in filename order). Older one-off SQL and planning notes are kept in `docs/archive/` for reference only.
 
-**Migrating from v1:** Uncomment the ALTER TABLE statements at the bottom of `schema.sql` and run those instead. This adds new columns without losing your existing data.
 
 ### 4. Run
 ```bash
@@ -65,5 +64,5 @@ src/
     RemindersPanel.jsx        # Today's due/overdue bar
     Dashboard.jsx             # Metrics, charts, alerts
     ActiveDeadPanel.jsx       # Table view for active/archived
-schema.sql                   # Supabase table definitions
+supabase/migrations/         # Supabase schema migrations
 ```

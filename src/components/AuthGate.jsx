@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../supabase'
+import { getSession, onAuthChange } from '../api/auth'
 import Login from './Login'
 
 export default function AuthGate({ children }) {
   const [session, setSession] = useState(undefined) // undefined = loading
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    getSession().then(({ data }) => setSession(data.session))
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = onAuthChange((_event, session) => {
       setSession(session)
     })
 

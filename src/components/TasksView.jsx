@@ -1,18 +1,9 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
 import { TASK_TYPES } from '../stages'
-import { todayStr } from '../utils'
+import { todayStr, daysFromToday } from '../utils'
 
 function taskTypeInfo(type) {
   return TASK_TYPES.find(t => t.key === type) || TASK_TYPES[TASK_TYPES.length - 1]
-}
-
-function quickDate(daysFromNow) {
-  const d = new Date()
-  d.setDate(d.getDate() + daysFromNow)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
 }
 
 function LeadPicker({ clients, value, onChange }) {
@@ -87,7 +78,7 @@ export function AddTaskForm({ clients, onAdd, onCancel, initialDate, initialTime
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
   const [linkedClient, setLinkedClient] = useState(null)
-  const [dueDate, setDueDate] = useState(initialDate || quickDate(0))
+  const [dueDate, setDueDate] = useState(initialDate || daysFromToday(0))
   const [dueTime, setDueTime] = useState(initialTime || '')
 
   function submit() {
@@ -95,7 +86,7 @@ export function AddTaskForm({ clients, onAdd, onCancel, initialDate, initialTime
     if (!linkedClient && !title.trim()) return
     onAdd(linkedClient ? linkedClient.id : null, taskType, note.trim() || null, dueDate, dueTime || null, title.trim() || null)
     setTaskType('custom'); setTitle(''); setNote(''); setLinkedClient(null)
-    setDueDate(initialDate || quickDate(0)); setDueTime(initialTime || '')
+    setDueDate(initialDate || daysFromToday(0)); setDueTime(initialTime || '')
   }
 
   return (
@@ -141,9 +132,9 @@ export function AddTaskForm({ clients, onAdd, onCancel, initialDate, initialTime
       </div>
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-        <button className="quick-date-btn" onClick={() => setDueDate(quickDate(0))}>Today</button>
-        <button className="quick-date-btn" onClick={() => setDueDate(quickDate(1))}>Tomorrow</button>
-        <button className="quick-date-btn" onClick={() => setDueDate(quickDate(7))}>+7 days</button>
+        <button className="quick-date-btn" onClick={() => setDueDate(daysFromToday(0))}>Today</button>
+        <button className="quick-date-btn" onClick={() => setDueDate(daysFromToday(1))}>Tomorrow</button>
+        <button className="quick-date-btn" onClick={() => setDueDate(daysFromToday(7))}>+7 days</button>
         <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} style={{ fontSize: 12, padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 6 }} />
         <input type="time" value={dueTime} onChange={e => setDueTime(e.target.value)} title="Optional time" style={{ fontSize: 12, padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 6 }} />
       </div>

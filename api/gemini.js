@@ -112,7 +112,7 @@ module.exports = async function handler(req, res) {
 
   var body = req.body
   if (typeof body === 'string') {
-    try { body = JSON.parse(body) } catch (e) {
+    try { body = JSON.parse(body) } catch {
       return res.status(400).json({ error: 'Invalid JSON body' })
     }
   }
@@ -198,7 +198,7 @@ module.exports = async function handler(req, res) {
     if (feature === 'parse') {
       try {
         return res.status(200).json({ result: JSON.parse(text) })
-      } catch (e) {
+      } catch {
         return res.status(200).json({ result: { what_happened: rawNote, parse_error: true } })
       }
     }

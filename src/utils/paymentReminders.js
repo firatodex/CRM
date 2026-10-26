@@ -1,11 +1,12 @@
-import { supabase } from '../supabase'
+import { findRecurringPeriodPayment, updatePaymentReturning, insertPaymentReturning } from '../api/payments'
+import { updateDeal } from '../api/deals'
 import {
   addMonths,
   cadenceLabel,
   monthsForCadence,
   periodEnd,
 } from './paymentMath'
-import { todayStr } from '../utils'
+import { todayStr } from './index'
 
 /**
  * Mark a recurring payment reminder done:
@@ -43,22 +44,11 @@ export async function completePaymentReminder(deal, opts = {}) {
 
   if (createPaymentRow && amount >= 0) {
     // Avoid duplicate period rows for the same start date
-    const { data: existing } = await supabase
-      .from('payments')
-      .select('id')
-      .eq('deal_id', deal.id)
-      .eq('period_start', periodStart)
-      .eq('kind', 'recurring_period')
-      .maybeSingle()
+    const { data: existing } = await findRecurringPeriodPayment(deal.id, periodStart)
 
     if (existing?.id) {
       if (markPaid) {
-        const { data: updated, error: upErr } = await supabase
-          .from('payments')
-          .update({ paid: true, paid_at: today })
-          .eq('id', existing.id)
-          .select()
-          .single()
+        const { data: updated, error: upErr } = await updatePaymentReturning(existing.id, { paid: true, paid_at: today })
         if (upErr) throw upErr
         payment = updated
       } else {
@@ -76,25 +66,16 @@ export async function completePaymentReminder(deal, opts = {}) {
         period_start: periodStart,
         period_end: periodEndDate,
       }
-      const { data: inserted, error: inErr } = await supabase
-        .from('payments')
-        .insert(row)
-        .select()
-        .single()
+      const { data: inserted, error: inErr } = await insertPaymentReturning(row)
       if (inErr) throw inErr
       payment = inserted
     }
   }
 
-  const { data: updatedDeal, error: dealErr } = await supabase
-    .from('deals')
-    .update({
-      next_reminder_at: nextReminder,
-      reminder_enabled: true,
-    })
-    .eq('id', deal.id)
-    .select()
-    .single()
+  const { data: updatedDeal, error: dealErr } = await updateDeal(deal.id, {
+    next_reminder_at: nextReminder,
+    reminder_enabled: true,
+  })
   if (dealErr) throw dealErr
 
   return { deal: updatedDeal, payment }

@@ -1,12 +1,8 @@
 import { cadenceLabel } from './paymentMath'
-import { todayStr } from '../utils'
+import { todayStr, addDays } from './index'
 
-/** Add calendar days to YYYY-MM-DD. */
-export function addDaysIso(iso, n) {
-  const d = new Date(iso + 'T00:00:00')
-  d.setDate(d.getDate() + n)
-  return d.toISOString().slice(0, 10)
-}
+/** Add calendar days to YYYY-MM-DD. Kept as an alias of the shared helper. */
+export const addDaysIso = addDays
 
 export function daysUntil(iso, today) {
   if (!iso) return null

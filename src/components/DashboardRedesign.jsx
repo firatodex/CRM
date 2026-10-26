@@ -3,8 +3,20 @@ import {
   ComposedChart, Bar, Scatter, BarChart, Cell
 } from 'recharts'
 import { useMemo } from 'react'
-import { formatCurrency, todayStr, toDateStr, datePart } from '../utils'
+import { formatCurrency, todayStr, toDateStr, datePart, addDays } from '../utils'
+import { addMonths } from '../utils/paymentMath'
 import { PIPELINE_STAGES } from '../stages'
+
+// Last n months, oldest first, as { key: 'YYYY-MM', label: 'Oct 26' }
+function lastMonths(n) {
+  const thisMonthStart = todayStr().slice(0, 7) + '-01'
+  return Array.from({ length: n }, (_, i) => {
+    const key = addMonths(thisMonthStart, i - (n - 1)).slice(0, 7)
+    const [y, m] = key.split('-').map(Number)
+    return { key, label: new Date(y, m - 1, 1).toLocaleDateString('en-IN', { year: '2-digit', month: 'short' }) }
+  })
+}
+const monthOf = timestamp => (datePart(timestamp) || '').slice(0, 7)
 
 // ════════════════════════════════════════════════════════════════════════════════════════
 function MetricCard({ label, value, comparison, color = 'var(--text-dark)', trend = null, borderColor = 'var(--primary)' }) {
@@ -36,88 +48,43 @@ function MetricCard({ label, value, comparison, color = 'var(--text-dark)', tren
 }
 
 function BusinessScoreboard({ clients, deals, payments }) {
-  const today = new Date()
-  const currentMonth = today.getMonth()
-  const currentYear = today.getFullYear()
-  const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1
-  const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear
+  // Month keys as 'YYYY-MM' (local), compared against the date part of stored timestamps
+  const thisMonth = todayStr().slice(0, 7)
+  const lastMonth = addMonths(thisMonth + '-01', -1).slice(0, 7)
+  const inMonth = (timestamp, month) => (datePart(timestamp) || '').startsWith(month)
+  const sumBy = (rows, field) => rows.reduce((s, r) => s + Number(r[field] || 0), 0)
+  const pctChange = (now, before) => Math.round(((now - before) / before) * 100)
 
-  // ── Money Metrics ──────────────────────────────────────────────────────────
   const active = clients.filter(c => c.stage === 'active')
   const dead = clients.filter(c => c.stage === 'dead')
-  const allClosed = [...active, ...dead]
 
-  // Revenue this month (from deals won this month)
-  const dealsThisMonth = deals.filter(d => {
-    if (!d.created_at) return false
-    const datePart = d.created_at.split('T')[0]  // "2026-08-12"
-    const [year, month] = datePart.split('-').map(Number)
-    return month === (currentMonth + 1) && year === currentYear
-  })
-  const revenueThisMonth = dealsThisMonth.reduce((s, d) => s + Number(d.deal_value || 0), 0)
+  // Revenue = deals closed in the month (deals.created_at is the close date)
+  const dealsThisMonth = deals.filter(d => inMonth(d.created_at, thisMonth))
+  const dealsLastMonth = deals.filter(d => inMonth(d.created_at, lastMonth))
+  const revenueThisMonth = sumBy(dealsThisMonth, 'deal_value')
+  const revenueLastMonth = sumBy(dealsLastMonth, 'deal_value')
 
-  // Cash collected this month
-  const paymentsThisMonth = payments.filter(p => {
-    if (!p.paid_at || !p.paid) return false
-    const datePart = p.paid_at.split('T')[0]  // "2026-08-12"
-    const [year, month] = datePart.split('-').map(Number)
-    return month === (currentMonth + 1) && year === currentYear
-  })
-  const cashCollectedThisMonth = paymentsThisMonth.reduce((s, p) => s + Number(p.amount || 0), 0)
+  const cashCollectedThisMonth = sumBy(payments.filter(p => p.paid && inMonth(p.paid_at, thisMonth)), 'amount')
 
-  // Pending collection (paid: false)
   const pendingPayments = payments.filter(p => !p.paid)
-  const pendingCollection = pendingPayments.reduce((s, p) => s + Number(p.amount || 0), 0)
+  const pendingCollection = sumBy(pendingPayments, 'amount')
 
-  // Deals won this month
-  const dealsWonThisMonth = active.filter(c => {
-    if (!c.won_at) return false
-    const datePart = c.won_at.split('T')[0]  // "2026-08-12"
-    const [year, month] = datePart.split('-').map(Number)
-    return month === (currentMonth + 1) && year === currentYear
-  }).length
+  const dealsWonThisMonth = active.filter(c => inMonth(c.won_at, thisMonth)).length
+  const dealsWonLastMonth = active.filter(c => inMonth(c.won_at, lastMonth)).length
 
-  // Average deal value
-  const avgDealValue = dealsThisMonth.length > 0
-    ? revenueThisMonth / dealsThisMonth.length
-    : 0
+  const avgDealValue = dealsThisMonth.length ? revenueThisMonth / dealsThisMonth.length : 0
+  const avgDealLastMonth = dealsLastMonth.length ? revenueLastMonth / dealsLastMonth.length : 0
 
-  // Win rate (active / (active + dead))
-  const closedCount = allClosed.length
-  const winRatePercent = closedCount > 0 ? ((active.length / closedCount) * 100).toFixed(0) : '—'
+  const closedCount = active.length + dead.length
+  const winRate = closedCount > 0 ? Math.round((active.length / closedCount) * 100) : null
 
-  // Pipeline reserve (contacted + proposal, weighted)
+  // Reserve is a points score (not rupees): 1 per contacted lead, 7 per proposal sent in the last 30 days
   const contacted = clients.filter(c => c.stage === 'contacted').length
-  const proposal = clients.filter(c => c.stage === 'proposal').length
-  const proposalRecent = clients.filter(c => {
-    if (c.stage !== 'proposal' || !c.proposal_sent_at) return false
-    const datePart = c.proposal_sent_at.split('T')[0]
-    const [year, month, day] = datePart.split('-').map(Number)
-    const sentDate = new Date(year, month - 1, day)
-    const now = new Date()
-    const daysSinceSent = Math.floor((now - sentDate) / (1000 * 60 * 60 * 24))
-    return daysSinceSent <= 30
-  }).length
-  const reserve = (contacted * 1) + (proposalRecent * 7)
-
-  // Active proposals
-  const activeProposals = proposal
-
-  // Comparisons with last month
-  const dealsLastMonth = deals.filter(d => {
-    if (!d.created_at) return false
-    const datePart = d.created_at.split('T')[0]
-    const [year, month] = datePart.split('-').map(Number)
-    return month === lastMonth && year === lastMonthYear
-  })
-  const revenueLastMonth = dealsLastMonth.reduce((s, d) => s + Number(d.deal_value || 0), 0)
-
-  const dealsWonLastMonth = allClosed.filter(c => {
-    if (!c.won_at) return false
-    const datePart = c.won_at.split('T')[0]
-    const [year, month] = datePart.split('-').map(Number)
-    return month === lastMonth && year === lastMonthYear
-  }).length
+  const proposals = clients.filter(c => c.stage === 'proposal')
+  const freshProposalCutoff = addDays(todayStr(), -30)
+  const freshProposals = proposals.filter(c => c.proposal_sent_at && datePart(c.proposal_sent_at) >= freshProposalCutoff).length
+  const reservePoints = contacted + freshProposals * 7
+  const proposalValue = sumBy(proposals, 'potential_revenue')
 
   return (
     <div className="dash-card">
@@ -127,21 +94,21 @@ function BusinessScoreboard({ clients, deals, payments }) {
         <MetricCard 
           label="Revenue This Month"
           value={formatCurrency(revenueThisMonth)}
-          comparison={revenueLastMonth > 0 ? `${((revenueThisMonth - revenueLastMonth) / revenueLastMonth * 100).toFixed(0)}% vs last month` : 'First month'}
+          comparison={revenueLastMonth > 0 ? `${pctChange(revenueThisMonth, revenueLastMonth)}% vs last month` : 'Nothing last month'}
           trend={revenueThisMonth > revenueLastMonth ? 'up' : 'down'}
           borderColor="var(--primary)"
         />
         <MetricCard 
           label="Cash Collected"
           value={formatCurrency(cashCollectedThisMonth)}
-          comparison={`${cashCollectedThisMonth > revenueThisMonth ? '+' : ''}${formatCurrency(cashCollectedThisMonth - revenueThisMonth)}`}
-          color={cashCollectedThisMonth >= revenueThisMonth * 0.7 ? 'var(--success)' : 'var(--text-dark)'}
+          comparison="paid this month"
+          color="var(--success)"
           borderColor="var(--success)"
         />
         <MetricCard 
           label="Pending Collection"
           value={formatCurrency(pendingCollection)}
-          comparison={pendingCollection > 0 ? `${(pendingCollection / revenueThisMonth * 100).toFixed(0)}% of revenue` : 'All paid'}
+          comparison={pendingPayments.length > 0 ? `${pendingPayments.length} unpaid payment${pendingPayments.length === 1 ? '' : 's'}` : 'All paid'}
           color={pendingCollection > 0 ? 'var(--warning)' : 'var(--success)'}
           borderColor="var(--warning)"
         />
@@ -150,37 +117,37 @@ function BusinessScoreboard({ clients, deals, payments }) {
         <MetricCard 
           label="Deals Won This Month"
           value={dealsWonThisMonth}
-          comparison={dealsWonLastMonth > 0 ? `${dealsWonThisMonth - dealsWonLastMonth > 0 ? '+' : ''}${dealsWonThisMonth - dealsWonLastMonth} vs last month` : 'First month'}
+          comparison={`${dealsWonThisMonth - dealsWonLastMonth > 0 ? '+' : ''}${dealsWonThisMonth - dealsWonLastMonth} vs last month`}
           trend={dealsWonThisMonth > dealsWonLastMonth ? 'up' : 'down'}
           borderColor="var(--primary)"
         />
         <MetricCard 
           label="Average Deal Value"
           value={formatCurrency(Math.round(avgDealValue))}
-          comparison={dealsLastMonth.length > 0 ? `${((avgDealValue - dealsLastMonth.reduce((s, d) => s + Number(d.deal_value || 0), 0) / dealsLastMonth.length) / (dealsLastMonth.reduce((s, d) => s + Number(d.deal_value || 0), 0) / dealsLastMonth.length) * 100).toFixed(0)}% trend` : 'New'}
+          comparison={avgDealLastMonth > 0 ? `${pctChange(avgDealValue, avgDealLastMonth)}% vs last month` : 'Nothing last month'}
           color="var(--primary)"
           borderColor="var(--primary)"
         />
         <MetricCard 
           label="Win Rate"
-          value={`${winRatePercent}%`}
+          value={winRate === null ? '—' : `${winRate}%`}
           comparison={`${active.length} won, ${dead.length} lost`}
-          color={winRatePercent > 30 ? 'var(--success)' : winRatePercent > 10 ? 'var(--primary)' : 'var(--error)'}
+          color={winRate > 30 ? 'var(--success)' : winRate > 10 ? 'var(--primary)' : 'var(--error)'}
           borderColor="#5E8FC0"
         />
 
         {/* Future Section */}
         <MetricCard 
           label="Pipeline Reserve"
-          value={formatCurrency(reserve)}
-          comparison={revenueThisMonth > 0 ? `${(reserve / revenueThisMonth).toFixed(1)}× monthly target` : 'No sales yet'}
+          value={`${reservePoints} pts`}
+          comparison={`${contacted} contacted + ${freshProposals} fresh proposals × 7`}
           color="var(--primary)"
           borderColor="var(--primary)"
         />
         <MetricCard 
           label="Active Proposals"
-          value={activeProposals}
-          comparison={activeProposals > 0 ? `${formatCurrency(Math.round(reserve / activeProposals))}/proposal` : 'None'}
+          value={proposals.length}
+          comparison={proposalValue > 0 ? `${formatCurrency(proposalValue)} potential` : 'No value entered'}
           color="var(--primary)"
           borderColor="#5E8FC0"
         />
@@ -193,45 +160,21 @@ function BusinessScoreboard({ clients, deals, payments }) {
 // SECTION: REVENUE REALIZATION (6-MONTH HISTORY)
 // ════════════════════════════════════════════════════════════════════════════════════════
 function RevenueRealization({ deals }) {
-  const monthlyData = {}
-  const now = new Date()
-
-  // Generate last 6 months
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const monthKey = d.toLocaleDateString('en-IN', { year: '2-digit', month: 'short' })
-    monthlyData[monthKey] = { revenue: 0, dealCount: 0, avgDeal: 0 }
-  }
-
-  // Populate with deal data
-  deals.forEach(d => {
-    if (!d.created_at) return
-    const datePart = d.created_at.split('T')[0]  // "2026-08-12"
-    const [year, month] = datePart.split('-').map(Number)
-    // Create a local date object for display (just for month key)
-    const dateForDisplay = new Date(year, month - 1, 1)
-    const monthKey = dateForDisplay.toLocaleDateString('en-IN', { year: '2-digit', month: 'short' })
-    if (monthlyData[monthKey]) {
-      monthlyData[monthKey].revenue += Number(d.deal_value || 0)
-      monthlyData[monthKey].dealCount += 1
-    }
+  const months = lastMonths(6)
+  const monthly = months.map(({ key, label }) => {
+    const inMonth = deals.filter(d => monthOf(d.created_at) === key)
+    const revenue = inMonth.reduce((s, d) => s + Number(d.deal_value || 0), 0)
+    return { label, revenue, dealCount: inMonth.length }
   })
 
-  // Calculate averages
-  Object.keys(monthlyData).forEach(month => {
-    if (monthlyData[month].dealCount > 0) {
-      monthlyData[month].avgDeal = Math.round(monthlyData[month].revenue / monthlyData[month].dealCount)
-    }
-  })
-
-  const data = Object.entries(monthlyData).map(([month, stats]) => ({
-    month,
-    revenue: Math.round(stats.revenue / 1000), // in thousands for readability
-    dealCount: stats.dealCount,
-    avgDeal: stats.avgDeal,
+  const data = monthly.map(m => ({
+    month: m.label,
+    revenue: Math.round(m.revenue / 1000), // in thousands for readability
+    dealCount: m.dealCount,
+    avgDeal: m.dealCount > 0 ? Math.round(m.revenue / m.dealCount) : 0,
   }))
 
-  const totalRevenue = data.reduce((s, d) => s + d.revenue, 0) * 1000
+  const totalRevenue = monthly.reduce((s, m) => s + m.revenue, 0)
   const avgMonthly = Math.round(totalRevenue / data.length)
   const latestMonth = data[data.length - 1]
   const prevMonth = data[data.length - 2]
@@ -402,16 +345,11 @@ function PipelineReserveGraph({ clients, pipelineSnapshots }) {
     ? pipelinePointsData[pipelinePointsData.length - 1].proposals
     : null
 
-  const activeDeals = clients.filter(c => c.stage === 'active')
-  const monthlyRevenue = activeDeals.reduce((s, c) => s + Number(c.potential_revenue || 0), 0)
-  const reserveCoverage = monthlyRevenue > 0 ? (currentPoints / monthlyRevenue).toFixed(1) : '—'
-  const reservePerProposal = currentProposals > 0 ? Math.round(currentPoints / currentProposals) : 0
-
   return (
     <div className="dash-card">
       <div className="dash-card-title">Pipeline Reserve — Deal Machine Health</div>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-        Reserve (contacted + recent proposals, weighted) shows future revenue. Green dots = deals won = reserve released.
+        Reserve points: 1 per contacted lead + 7 per proposal sent in the last 30 days. Green dots = deals won = reserve released.
       </div>
 
       {pipelinePointsData.length === 0 ? (
@@ -503,23 +441,6 @@ function PipelineReserveGraph({ clients, pipelineSnapshots }) {
             </div>
           </div>
 
-          <div style={{ marginTop: 16, padding: '12px', background: 'var(--bg-light)', borderRadius: 8, fontSize: 12 }}>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>Pipeline Coverage</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Reserve vs Monthly</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--primary)' }}>
-                  {reserveCoverage}×
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Pts per Proposal</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--primary)' }}>
-                  {reservePerProposal}
-                </div>
-              </div>
-            </div>
-          </div>
         </>
       )}
     </div>
@@ -683,46 +604,21 @@ function SalesCycleAnalysis({ clients, contactLogs }) {
     })
     .filter(v => v !== null)
 
-  // Group by month for trend
-  const monthlyData = {}
-  const now = new Date()
-  
-  // Generate last 6 months
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const monthKey = d.toLocaleDateString('en-IN', { year: '2-digit', month: 'short' })
-    monthlyData[monthKey] = { total: 0, count: 0, min: Infinity, max: 0 }
-  }
-
-  cycles.forEach(c => {
-    if (!c.wonDate) return
-    const datePart = c.wonDate.split('T')[0]  // "2026-08-12"
-    const [year, month] = datePart.split('-').map(Number)
-    const dateForDisplay = new Date(year, month - 1, 1)
-    const monthKey = dateForDisplay.toLocaleDateString('en-IN', { year: '2-digit', month: 'short' })
-    if (monthlyData[monthKey]) {
-      monthlyData[monthKey].total += c.daysToClose
-      monthlyData[monthKey].count += 1
-      monthlyData[monthKey].min = Math.min(monthlyData[monthKey].min, c.daysToClose)
-      monthlyData[monthKey].max = Math.max(monthlyData[monthKey].max, c.daysToClose)
+  const trendData = lastMonths(6).map(({ key, label }) => {
+    const days = cycles.filter(c => monthOf(c.wonDate) === key).map(c => c.daysToClose)
+    return {
+      month: label,
+      avgDays: days.length > 0 ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) : 0,
+      count: days.length,
     }
   })
-
-  const trendData = Object.entries(monthlyData)
-    .map(([month, data]) => ({
-      month,
-      avgDays: data.count > 0 ? Math.round(data.total / data.count) : 0,
-      count: data.count,
-      min: data.min === Infinity ? 0 : data.min,
-      max: data.max,
-    }))
 
   const allCycles = cycles.length
   const currentAvg = cycles.length > 0 
     ? Math.round(cycles.reduce((a, b) => a + b.daysToClose, 0) / cycles.length)
     : 0
   const currentMedian = cycles.length > 0
-    ? cycles.sort((a, b) => a.daysToClose - b.daysToClose)[Math.floor(cycles.length / 2)].daysToClose
+    ? [...cycles].sort((a, b) => a.daysToClose - b.daysToClose)[Math.floor(cycles.length / 2)].daysToClose
     : 0
 
   return (
@@ -911,20 +807,26 @@ function PipelineAge({ clients }) {
 // ════════════════════════════════════════════════════════════════════════════════════════
 // SECTION: BOTTLENECK ANALYSIS
 // ════════════════════════════════════════════════════════════════════════════════════════
-function BottleneckAnalysis({ clients, contactLogs }) {
-  const stages = {
-    lead: clients.filter(c => c.stage === 'lead').length,
-    contacted: clients.filter(c => c.stage === 'contacted').length,
-    proposal: clients.filter(c => c.stage === 'proposal').length,
-    active: clients.filter(c => c.stage === 'active').length,
-  }
+function BottleneckAnalysis({ clients }) {
+  const count = stage => clients.filter(c => c.stage === stage).length
+  const stages = { lead: count('lead'), contacted: count('contacted'), proposal: count('proposal'), active: count('active') }
 
-  // Calculate conversion rates
-  const leadToContact = stages.lead > 0 ? ((stages.contacted / stages.lead) * 100).toFixed(0) : '—'
-  const contactToProposal = stages.contacted > 0 ? ((stages.proposal / stages.contacted) * 100).toFixed(0) : '—'
-  const proposalToWon = stages.proposal > 0 ? ((stages.active / stages.proposal) * 100).toFixed(0) : '—'
+  // A lead that is now at "proposal" has also passed "contacted", so each step counts
+  // everyone who reached it or went further. Dead leads are left out: we don't record
+  // how far they got before dying.
+  const funnel = [
+    { stage: 'Lead', reached: stages.lead + stages.contacted + stages.proposal + stages.active },
+    { stage: 'Contacted', reached: stages.contacted + stages.proposal + stages.active },
+    { stage: 'Proposal', reached: stages.proposal + stages.active },
+    { stage: 'Won', reached: stages.active },
+  ]
+  const rate = (to, from) => (from > 0 ? Math.round((to / from) * 100) : null)
+  const steps = funnel.slice(1).map((step, i) => ({
+    label: `${funnel[i].stage} → ${step.stage}`,
+    pct: rate(step.reached, funnel[i].reached),
+  }))
+  const maxReached = Math.max(...funnel.map(f => f.reached), 1)
 
-  // Find bottleneck
   let bottleneck = null
   if (stages.contacted === 0 && stages.lead > 5) {
     bottleneck = '⚠️ Too many unworked leads — increase contact activity'
@@ -934,95 +836,48 @@ function BottleneckAnalysis({ clients, contactLogs }) {
     bottleneck = '⚠️ Leads not converting to proposals — discovery or demo gap'
   }
 
-  // Overdue follow-ups
   const today = todayStr()
-  const overdue = clients.filter(c => 
-    !['active', 'dead'].includes(c.stage) && 
-    c.next_action_due && 
-    c.next_action_due < today
+  const overdue = clients.filter(c =>
+    !['active', 'dead'].includes(c.stage) && c.next_action_due && c.next_action_due < today
   ).length
-
-  if (overdue > 5) {
-    bottleneck = `⚠️ ${overdue} overdue follow-ups — execution issue`
-  }
-
-  const funnel = [
-    { stage: 'Lead', count: stages.lead },
-    { stage: 'Contacted', count: stages.contacted },
-    { stage: 'Proposal', count: stages.proposal },
-    { stage: 'Won', count: stages.active },
-  ]
+  if (overdue > 5) bottleneck = `⚠️ ${overdue} overdue follow-ups — execution issue`
 
   return (
     <div className="dash-card">
       <div className="dash-card-title">Sales Funnel & Bottleneck Analysis</div>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-        Where is the pipeline leaking? Where are conversions stalling?
+        How many leads reached each stage (dead leads excluded).
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-        {/* Funnel */}
         <div>
-          {funnel.map((item, idx) => {
-            const maxCount = Math.max(...funnel.map(f => f.count))
-            const width = maxCount > 0 ? (item.count / maxCount) * 100 : 0
-            return (
-              <div key={item.stage} style={{ marginBottom: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600 }}>{item.stage}</div>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--primary)' }}>{item.count}</div>
-                </div>
-                <div style={{
-                  height: 24,
-                  background: 'var(--bg-light)',
-                  borderRadius: 6,
-                  overflow: 'hidden',
-                }}>
-                  <div style={{
-                    height: '100%',
-                    width: `${width}%`,
-                    background: idx === 3 ? 'var(--success)' : 'var(--primary)',
-                    transition: 'width 0.3s',
-                  }} />
-                </div>
-                {idx < 3 && (
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
-                    → {funnel[idx + 1].count} converted ({((funnel[idx + 1].count / item.count) * 100).toFixed(0)}%)
-                  </div>
-                )}
+          {funnel.map((item, idx) => (
+            <div key={item.stage} style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>{item.stage}</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--primary)' }}>{item.reached}</div>
               </div>
-            )
-          })}
+              <div style={{ height: 24, background: 'var(--bg-light)', borderRadius: 6, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${(item.reached / maxReached) * 100}%`,
+                  background: idx === funnel.length - 1 ? 'var(--success)' : 'var(--primary)',
+                  transition: 'width 0.3s',
+                }} />
+              </div>
+            </div>
+          ))}
         </div>
 
-        {/* Conversion Rates */}
-        <div>
-          <div style={{ display: 'grid', gap: 12 }}>
-            <div style={{
-              background: 'var(--bg-light)',
-              borderRadius: 8,
-              padding: '12px',
-            }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Lead → Contacted</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--primary)', lineHeight: 1 }}>{leadToContact}%</div>
+        <div style={{ display: 'grid', gap: 12, alignContent: 'start' }}>
+          {steps.map(step => (
+            <div key={step.label} style={{ background: 'var(--bg-light)', borderRadius: 8, padding: '12px' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{step.label}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--primary)', lineHeight: 1 }}>
+                {step.pct === null ? '—' : `${step.pct}%`}
+              </div>
             </div>
-            <div style={{
-              background: 'var(--bg-light)',
-              borderRadius: 8,
-              padding: '12px',
-            }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Contacted → Proposal</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--primary)', lineHeight: 1 }}>{contactToProposal}%</div>
-            </div>
-            <div style={{
-              background: 'var(--bg-light)',
-              borderRadius: 8,
-              padding: '12px',
-            }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Proposal → Won</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: proposalToWon > 20 ? 'var(--success)' : 'var(--primary)', lineHeight: 1 }}>{proposalToWon}%</div>
-            </div>
-          </div>
+          ))}
         </div>
       </div>
 
@@ -1069,7 +924,7 @@ export default function DashboardRedesign({ clients = [], contactLogs = [], deal
 
       {/* Section 4: Sales Funnel & Bottleneck Analysis */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-        <BottleneckAnalysis clients={clients} contactLogs={contactLogs} />
+        <BottleneckAnalysis clients={clients} />
         <PipelineAge clients={clients} />
       </div>
     </div>

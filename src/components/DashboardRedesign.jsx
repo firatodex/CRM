@@ -1,11 +1,10 @@
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  ComposedChart, Bar, Scatter, BarChart, Cell
+  ComposedChart, Bar, Scatter, BarChart
 } from 'recharts'
 import { useMemo } from 'react'
 import { formatCurrency, todayStr, toDateStr, datePart, addDays } from '../utils'
 import { addMonths } from '../utils/paymentMath'
-import { PIPELINE_STAGES } from '../stages'
 
 // Last n months, oldest first, as { key: 'YYYY-MM', label: 'Oct 26' }
 function lastMonths(n) {

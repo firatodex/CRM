@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { ALL_STAGES, TEMPERATURES, SOURCES, TASK_TYPES } from '../stages'
 import { waLink, formatDateTime, todayStr, formatPhoneDisplay, daysFromToday } from '../utils'
-import LeadIntelligencePanel, { SmartNoteDumper } from './LeadIntelligencePanel'
+import SmartNoteDumper from './SmartNoteDumper'
 import ClientTab from './ClientTab'
 import { supabase } from '../supabase'
 
@@ -129,8 +129,6 @@ const EDITABLE_FIELDS = [
   'discovery_lost_deals','discovery_decision_maker','discovery_switch_openness',
   'discovery_completed_at'
 ]
-
-const RIGHT_TABS = ['Log', 'History', 'Discovery']
 
 function getLastMethod() {
   try { return localStorage.getItem('lastLogMethod') || 'Phone call' } catch { return 'Phone call' }

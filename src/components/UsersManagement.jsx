@@ -103,7 +103,7 @@ export default function UsersManagement() {
         <button 
           onClick={openNew}
           style={{
-            background: '#C2622D',
+            background: 'var(--primary)',
             color: 'white',
             border: 'none',
             padding: '10px 16px',
@@ -338,7 +338,7 @@ export default function UsersManagement() {
                 onClick={saveUser}
                 style={{
                   padding: '10px 16px',
-                  background: '#C2622D',
+                  background: 'var(--primary)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',

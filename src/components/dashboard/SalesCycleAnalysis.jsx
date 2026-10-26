@@ -101,7 +101,7 @@ export default function SalesCycleAnalysis({ clients, contactLogs }) {
               padding: '12px',
               textAlign: 'center',
             }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#FF9500' }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--warning)' }}>
                 {currentMedian}
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>

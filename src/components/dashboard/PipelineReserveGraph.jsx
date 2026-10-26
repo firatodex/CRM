@@ -110,14 +110,14 @@ export default function PipelineReserveGraph({ clients, pipelineSnapshots }) {
               <Scatter
                 yAxisId="reserve"
                 dataKey="wins"
-                fill="#34C759"
+                fill="var(--success)"
                 name="wins"
                 shape={(props) => {
                   const { cx, cy, payload } = props
                   if (!payload?.wins) return null
                   return (
                     <g>
-                      <circle cx={cx} cy={cy} r={5} fill="#34C759" />
+                      <circle cx={cx} cy={cy} r={5} fill="var(--success)" />
                       {payload.pointsRemoved && (
                         <text 
                           x={cx} 
@@ -125,7 +125,7 @@ export default function PipelineReserveGraph({ clients, pipelineSnapshots }) {
                           textAnchor="middle" 
                           fontSize={10} 
                           fontWeight={700} 
-                          fill="#34C759"
+                          fill="var(--success)"
                           pointerEvents="none"
                         >
                           -{payload.pointsRemoved}
@@ -148,7 +148,7 @@ export default function PipelineReserveGraph({ clients, pipelineSnapshots }) {
               Active proposals (right axis)
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)' }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#34C759' }} />
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)' }} />
               Deal won
             </div>
 

@@ -111,22 +111,22 @@ export default function SmartNoteDumper({ client, contactLogs, onApply }) {
 
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {result.suggested_stage && (
-                <span style={{ fontSize: 11, padding: '2px 8px', background: '#E8F2FF', color: 'var(--primary)', borderRadius: 20, fontWeight: 600 }}>
+                <span style={{ fontSize: 11, padding: '2px 8px', background: 'var(--blue-bg)', color: 'var(--primary)', borderRadius: 20, fontWeight: 600 }}>
                   Stage → {result.suggested_stage}
                 </span>
               )}
               {result.suggested_temperature && (
-                <span style={{ fontSize: 11, padding: '2px 8px', background: '#FFF4E5', color: 'var(--warning)', borderRadius: 20, fontWeight: 600 }}>
+                <span style={{ fontSize: 11, padding: '2px 8px', background: 'var(--warning-bg)', color: 'var(--warning)', borderRadius: 20, fontWeight: 600 }}>
                   Temp → {result.suggested_temperature}
                 </span>
               )}
               {result.buying_signal_detected && (
-                <span style={{ fontSize: 11, padding: '2px 8px', background: '#E8F9EE', color: 'var(--success)', borderRadius: 20, fontWeight: 600 }}>
+                <span style={{ fontSize: 11, padding: '2px 8px', background: 'var(--success-bg)', color: 'var(--success)', borderRadius: 20, fontWeight: 600 }}>
                   🎯 Buying signal
                 </span>
               )}
               {result.stall_detected && (
-                <span style={{ fontSize: 11, padding: '2px 8px', background: '#FFF0EF', color: 'var(--error)', borderRadius: 20, fontWeight: 600 }}>
+                <span style={{ fontSize: 11, padding: '2px 8px', background: 'var(--error-bg)', color: 'var(--error)', borderRadius: 20, fontWeight: 600 }}>
                   ⚠️ Stall detected
                 </span>
               )}
@@ -136,7 +136,7 @@ export default function SmartNoteDumper({ client, contactLogs, onApply }) {
                 </span>
               )}
               {result.parse_error && (
-                <span style={{ fontSize: 11, padding: '2px 8px', background: '#FFF4E5', color: 'var(--warning)', borderRadius: 20 }}>
+                <span style={{ fontSize: 11, padding: '2px 8px', background: 'var(--warning-bg)', color: 'var(--warning)', borderRadius: 20 }}>
                   Could not fully parse — raw note preserved
                 </span>
               )}

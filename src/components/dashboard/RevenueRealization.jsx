@@ -31,7 +31,7 @@ export default function RevenueRealization({ deals }) {
     : 0
 
   return (
-    <div className="dash-card">
+    <div className="dash-card revenue-card">
       <div className="dash-card-title">Revenue Realization — Business Scaling</div>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
         6-month revenue trend (orange) vs deal volume (blue) — is the business actually growing?

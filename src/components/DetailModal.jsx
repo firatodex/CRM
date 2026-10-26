@@ -246,7 +246,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                 {form.phone && (
                   <a
                     href={`tel:${form.phone.replace(/\s/g, '')}`}
-                    style={{ display: 'block', fontSize: 13, color: 'var(--text2)', marginTop: 4, textDecoration: 'none', letterSpacing: '0.5px' }}
+                    style={{ display: 'block', fontSize: 13, color: 'var(--text-light)', marginTop: 4, textDecoration: 'none', letterSpacing: '0.5px' }}
                   >
                     📞 {formatPhoneDisplay(form.phone)}
                   </a>
@@ -394,10 +394,10 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
               <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, paddingRight: 2 }}>
                 {(form.next_action || form.next_action_due) && (
                   <div className="next-action-summary" style={{ marginBottom: 10 }}>
-                    <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 3, fontWeight: 500 }}>NEXT ACTION</div>
-                    {form.next_action && <div style={{ fontSize: 13, color: 'var(--text1)' }}>{form.next_action}</div>}
+                    <div style={{ fontSize: 11, color: 'var(--text-light)', marginBottom: 3, fontWeight: 500 }}>NEXT ACTION</div>
+                    {form.next_action && <div style={{ fontSize: 13, color: 'var(--text-dark)' }}>{form.next_action}</div>}
                     {form.next_action_due && (
-                      <div style={{ fontSize: 12, color: form.next_action_due < todayStr() ? 'var(--danger)' : 'var(--text2)', marginTop: 2 }}>
+                      <div style={{ fontSize: 12, color: form.next_action_due < todayStr() ? 'var(--error)' : 'var(--text-light)', marginTop: 2 }}>
                         Due: {new Date(form.next_action_due + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                         {form.next_action_time && <span style={{ marginLeft: 6, fontWeight: 600 }}>@ {form.next_action_time}</span>}
                       </div>
@@ -408,7 +408,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                 {/* Read-only view of tasks attached to this lead — created/managed from the Tasks tab */}
                 {tasks.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
-                    <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 4, fontWeight: 500 }}>OPEN TASKS</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-light)', marginBottom: 4, fontWeight: 500 }}>OPEN TASKS</div>
                     {tasks.map(t => {
                       const info = TASK_TYPES.find(tt => tt.key === t.task_type) || TASK_TYPES[TASK_TYPES.length - 1]
                       return (
@@ -498,7 +498,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                     </div>
 
                     <div className="field" style={{ marginTop: 10 }}>
-                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happened?</label>
+                      <label style={{ fontSize: 12, color: 'var(--text-light)' }}>What happened?</label>
                       <textarea
                         value={logWhatHappened}
                         onChange={e => setLogWhatHappened(e.target.value)}
@@ -508,7 +508,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                     </div>
 
                     <div className="field">
-                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happens next?</label>
+                      <label style={{ fontSize: 12, color: 'var(--text-light)' }}>What happens next?</label>
                       <input
                         value={logWhatNext}
                         onChange={e => setLogWhatNext(e.target.value)}
@@ -520,7 +520,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                     </div>
 
                     <div className="field">
-                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>Due date</label>
+                      <label style={{ fontSize: 12, color: 'var(--text-light)' }}>Due date</label>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                         <button className={`quick-date-btn ${logDue === daysFromToday(0) ? 'active' : ''}`} onClick={() => setLogDue(daysFromToday(0))}>Today</button>
                         <button className={`quick-date-btn ${logDue === daysFromToday(1) ? 'active' : ''}`} onClick={() => setLogDue(daysFromToday(1))}>Tomorrow</button>
@@ -568,15 +568,15 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                       </div>
                     </div>
                     <div className="field" style={{ marginTop: 8 }}>
-                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happened?</label>
+                      <label style={{ fontSize: 12, color: 'var(--text-light)' }}>What happened?</label>
                       <textarea value={logWhatHappened} onChange={e => setLogWhatHappened(e.target.value)} rows={3} />
                     </div>
                     <div className="field">
-                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happens next?</label>
+                      <label style={{ fontSize: 12, color: 'var(--text-light)' }}>What happens next?</label>
                       <input value={logWhatNext} onChange={e => setLogWhatNext(e.target.value)} />
                     </div>
                     <div className="field">
-                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>Due date</label>
+                      <label style={{ fontSize: 12, color: 'var(--text-light)' }}>Due date</label>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                         <button className={`quick-date-btn ${logDue === daysFromToday(0) ? 'active' : ''}`} onClick={() => setLogDue(daysFromToday(0))}>Today</button>
                         <button className={`quick-date-btn ${logDue === daysFromToday(1) ? 'active' : ''}`} onClick={() => setLogDue(daysFromToday(1))}>Tomorrow</button>

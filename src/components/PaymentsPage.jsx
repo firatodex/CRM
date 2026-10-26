@@ -710,7 +710,7 @@ function HistoryTable({ rows, today, onOpenClient, onToggleStatus, statusBusyId 
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {rows.map(({ payment, client, deal }) => {
+      {rows.map(({ payment, client }) => {
         const overdue = !payment.paid && payment.due_date && payment.due_date < today
         const isCredit = Number(payment.amount) < 0
         const busy = statusBusyId === payment.id

@@ -101,8 +101,6 @@ const COL_HEIGHT = 480 // px
 
 function DayColumn({ date, items, onOpenClient, onAddAtTime, onDone }) {
   const today = todayStr()
-  const isToday = date === today
-
   const timed = items.filter(i => i.time)
   const untimed = items.filter(i => !i.time)
 

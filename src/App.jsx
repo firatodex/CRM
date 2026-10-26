@@ -426,12 +426,6 @@ export default function App() {
     }
   }
 
-  async function handleUpdateClient(id, updates) {
-    const { data, error } = await supabase
-      .from('clients').update(updates).eq('id', id).select().single()
-    if (!error && data) setClients(prev => prev.map(c => c.id === data.id ? data : c))
-  }
-
   // Instead of using native confirm(), we set the id and show ConfirmModal.
   // The actual delete runs in handleDeleteConfirmed once the user clicks Delete.
   function handleDelete(id) {
@@ -488,7 +482,7 @@ export default function App() {
   // client-generated UUID used as the primary key, making this safe to
   // call twice with the same rowId (e.g. a retried sync) without creating
   // a duplicate row.
-  async function performLogContact({ clientId, method, note, whatHappened, whatNext, now, progress = false }, rowId) {
+  async function performLogContact({ clientId, method, note, now, progress = false }, rowId) {
     const { data: logData, error } = await supabase
       .from('contact_log')
       .insert({
@@ -718,7 +712,7 @@ export default function App() {
           <div className="loading"><div className="loading-spinner" />Loading...</div>
         ) : view === 'pipeline' ? (
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <FilterBar clients={clients} filters={filters} onChange={setFilters} />
+            <FilterBar filters={filters} onChange={setFilters} />
             <div className="board" style={{ flex: 1 }}>
               {PIPELINE_STAGES.map(stage => {
                 const stageClients = applyFilters(

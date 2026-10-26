@@ -119,6 +119,17 @@ function LeadContactsSection({ clientId }) {
 
 const LOG_METHODS = ['Phone call', 'WhatsApp', 'Email', 'In person']
 
+// Fields compared against the saved client to detect unsaved edits
+const EDITABLE_FIELDS = [
+  'name','stage','phone','email','company','business_type',
+  'next_action','next_action_due','next_action_time','notes','temperature',
+  'potential_revenue','proposal_value','source','website','pain_point',
+  'current_solution','objection',
+  'discovery_team_size','discovery_monthly_leads','discovery_current_tool',
+  'discovery_lost_deals','discovery_decision_maker','discovery_switch_openness',
+  'discovery_completed_at'
+]
+
 const RIGHT_TABS = ['Log', 'History', 'Discovery']
 
 function getLastMethod() {
@@ -135,44 +146,14 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
   const [logTime, setLogTime]                  = useState('')
   const [showSmartDump, setShowSmartDump]     = useState(false)
   const [rightTab, setRightTab]               = useState('Log')
-  const [savedFlash, setSavedFlash]           = useState(false)
-  const [logSavedFlash, setLogSavedFlash]     = useState(false)
   const [saveWarning, setSaveWarning]         = useState(null)
   const firstInputRef = useRef(null)
-  const flashTimerRef = useRef(null)
-  const logFlashTimerRef = useRef(null)
-
-  useEffect(() => () => {
-    if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
-    if (logFlashTimerRef.current) clearTimeout(logFlashTimerRef.current)
-  }, [])
-
-  function showFlash() {
-    if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
-    setSavedFlash(true)
-    flashTimerRef.current = setTimeout(() => setSavedFlash(false), 2000)
-  }
-
-  function showLogFlash() {
-    if (logFlashTimerRef.current) clearTimeout(logFlashTimerRef.current)
-    setLogSavedFlash(true)
-    logFlashTimerRef.current = setTimeout(() => setLogSavedFlash(false), 1000)
-  }
 
   function handleSetLogMethod(m) {
     setLogMethod(m)
-    try { localStorage.setItem('lastLogMethod', m) } catch {}
+    try { localStorage.setItem('lastLogMethod', m) } catch { /* storage unavailable */ }
   }
 
-  const EDITABLE_FIELDS = [
-    'name','stage','phone','email','company','business_type',
-    'next_action','next_action_due','next_action_time','notes','temperature',
-    'potential_revenue','proposal_value','source','website','pain_point',
-    'current_solution','objection',
-    'discovery_team_size','discovery_monthly_leads','discovery_current_tool',
-    'discovery_lost_deals','discovery_decision_maker','discovery_switch_openness',
-    'discovery_completed_at'
-  ]
   const isDirty = useMemo(() => EDITABLE_FIELDS.some(k => {
     const a = form[k] == null ? '' : String(form[k])
     const b = client[k] == null ? '' : String(client[k])
@@ -450,18 +431,6 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
           {/* Right: tabbed panel */}
           <div className="detail-history detail-history-wide" style={{ position: 'relative' }}>
 
-            {/* Log saved flash */}
-            {logSavedFlash && (
-              <div style={{
-                position: 'absolute', top: 8, left: 0, right: 0,
-                background: 'var(--success)', color: '#fff',
-                fontSize: 12, fontWeight: 600, textAlign: 'center',
-                padding: '6px', borderRadius: 6, zIndex: 10,
-                animation: 'fadeOut 1s forwards',
-              }}>
-                ✓ Logged
-              </div>
-            )}
 
             {/* Field-save-failed warning — persists until dismissed, since it's
                 important enough that it shouldn't auto-fade like the success flash */}
@@ -838,9 +807,6 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
             Delete
           </button>
           <div className="spacer" />
-          <span style={{ fontSize: 12, color: 'var(--success)', opacity: savedFlash ? 1 : 0, transition: 'opacity 0.3s' }}>
-            ✓ Saved
-          </span>
           <button className="btn btn-secondary" onClick={() => {
             if (isDirty || hasLog) { if (window.confirm('You have unsaved changes. Close anyway?')) onClose() }
             else onClose()

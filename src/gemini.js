@@ -4,10 +4,18 @@
 // All requests go to /api/gemini — your own Vercel serverless function —
 // which holds the key securely in server-side environment variables.
 
+import { supabase } from './supabase'
+
 async function callBackend(body) {
+  // The endpoint only answers signed-in users, so send the current session token.
+  const { data: sessionData } = await supabase.auth.getSession()
+  const token = sessionData?.session?.access_token
+  const headers = { 'Content-Type': 'application/json' }
+  if (token) headers.Authorization = `Bearer ${token}`
+
   const response = await fetch('/api/gemini', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   })
 

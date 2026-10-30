@@ -62,11 +62,11 @@ alter table clients enable row level security;
 alter table contact_log enable row level security;
 
 -- Allow all operations for anon key (single-user CRM)
-create policy "Allow all on clients" on clients
-  for all using (true) with check (true);
+create policy "authenticated_full_access_clients" on clients
+  for all to authenticated using (true) with check (true);
 
-create policy "Allow all on contact_log" on contact_log
-  for all using (true) with check (true);
+create policy "authenticated_full_access_contact_log" on contact_log
+  for all to authenticated using (true) with check (true);
 
 
 -- ══════════════════════════════════════════════════

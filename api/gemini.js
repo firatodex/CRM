@@ -99,13 +99,36 @@ function buildContext(client, logs) {
   return profile + '\n\n' + history
 }
 
-module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+// Supabase project used to verify the caller's login. These two values are
+// public by design (they ship in the browser bundle); env vars take priority.
+var SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL ||
+  'https://sqmfeumltrtluchfzhku.supabase.co'
+var SUPABASE_PUBLIC_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY ||
+  'sb_publishable_wC6SA9xq2nBRmUxoj2wb3w_cYDaXzck'
 
-  if (req.method === 'OPTIONS') return res.status(200).end()
+// Returns the signed-in Supabase user for this request, or null.
+async function getSignedInUser(req) {
+  var header = req.headers['authorization'] || req.headers['Authorization'] || ''
+  var match = /^Bearer\s+(.+)$/i.exec(header)
+  if (!match) return null
+  try {
+    var r = await fetch(SUPABASE_URL + '/auth/v1/user', {
+      headers: { apikey: SUPABASE_PUBLIC_KEY, Authorization: 'Bearer ' + match[1] }
+    })
+    if (!r.ok) return null
+    var user = await r.json()
+    return user && user.id ? user : null
+  } catch (e) {
+    return null
+  }
+}
+
+module.exports = async function handler(req, res) {
+  // Same-origin only: no CORS headers, so other websites cannot call this endpoint.
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  var user = await getSignedInUser(req)
+  if (!user) return res.status(401).json({ error: 'Please sign in again to use AI features.' })
 
   var key = process.env.GEMINI_API_KEY
   if (!key) return res.status(500).json({ error: 'GEMINI_API_KEY not configured in Vercel environment variables' })

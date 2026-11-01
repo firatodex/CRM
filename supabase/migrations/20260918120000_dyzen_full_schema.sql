@@ -468,7 +468,7 @@ create trigger trg_forecast_accuracy
   before insert or update on dyzen.forecast_log
   for each row execute function dyzen.calculate_forecast_accuracy();
 
--- ── RLS (LAN staging: permissive for anon — tighten before public HTTPS) ──
+-- ── RLS: signed-in users only. Never allow anon (the anon key is public). ──
 do $$
 declare
   t text;
@@ -485,8 +485,9 @@ begin
     if to_regclass('dyzen.' || t) is not null then
       execute format('alter table dyzen.%I enable row level security', t);
       execute format('drop policy if exists "dyzen_anon_all_%s" on dyzen.%I', t, t);
+      execute format('drop policy if exists "dyzen_authenticated_all_%s" on dyzen.%I', t, t);
       execute format(
-        'create policy "dyzen_anon_all_%s" on dyzen.%I for all using (true) with check (true)',
+        'create policy "dyzen_authenticated_all_%s" on dyzen.%I for all to authenticated using (true) with check (true)',
         t, t
       );
     end if;
@@ -494,12 +495,12 @@ begin
 end $$;
 
 -- ── grants for PostgREST roles ──
-grant usage on schema dyzen to anon, authenticated, service_role;
-grant all on all tables in schema dyzen to anon, authenticated, service_role;
-grant all on all sequences in schema dyzen to anon, authenticated, service_role;
-grant all on all functions in schema dyzen to anon, authenticated, service_role;
-alter default privileges in schema dyzen grant all on tables to anon, authenticated, service_role;
-alter default privileges in schema dyzen grant all on sequences to anon, authenticated, service_role;
+grant usage on schema dyzen to authenticated, service_role;
+grant all on all tables in schema dyzen to authenticated, service_role;
+grant all on all sequences in schema dyzen to authenticated, service_role;
+grant all on all functions in schema dyzen to authenticated, service_role;
+alter default privileges in schema dyzen grant all on tables to authenticated, service_role;
+alter default privileges in schema dyzen grant all on sequences to authenticated, service_role;
 
 -- seed admin user (idempotent)
 insert into dyzen.users (email, name, role, is_active)

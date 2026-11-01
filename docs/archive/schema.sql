@@ -66,21 +66,16 @@ create index if not exists idx_contact_log_client on contact_log(client_id);
 create index if not exists idx_contact_log_date on contact_log(contacted_at desc);
 
 -- ── 5. Row Level Security ──
--- WARNING: The policies below allow full access to the anon key.
--- This is only acceptable for a strictly single-user, private deployment
--- where the Supabase URL and anon key are kept secret (e.g. via .env.local
--- and never committed to a public repo).
--- For any multi-user or shared deployment, replace these with proper
--- auth-based policies, e.g.:
---   using (auth.uid() = user_id)
+-- Access requires a signed-in Supabase user (matches production).
+-- Never grant these tables to anon: the anon key ships in the browser bundle.
 alter table clients enable row level security;
 alter table contact_log enable row level security;
 
-create policy "Allow all on clients" on clients
-  for all using (true) with check (true);
+create policy "authenticated_full_access_clients" on clients
+  for all to authenticated using (true) with check (true);
 
-create policy "Allow all on contact_log" on contact_log
-  for all using (true) with check (true);
+create policy "authenticated_full_access_contact_log" on contact_log
+  for all to authenticated using (true) with check (true);
 
 
 -- ══════════════════════════════════════════════════

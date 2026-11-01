@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { supabase } from '../supabase'
+import { insertDeal, updateDeal } from '../api/deals'
+import { insertPayment, patchPayment, findFirstMonthPayment, findRegularPayment } from '../api/payments'
+import { hasOnboardingSteps, insertDefaultOnboardingSteps } from '../api/onboarding'
 import { paymentRecordSchema } from '../schemas/paymentRecordSchema'
 import {
   CADENCE_OPTIONS,
@@ -365,33 +367,19 @@ export default function PaymentRecordModal({
 
       let deal
       if (isEdit && existingDeal?.id) {
-        const { data: updated, error: upErr } = await supabase
-          .from('deals')
-          .update(dealRow)
-          .eq('id', existingDeal.id)
-          .select()
-          .single()
+        const { data: updated, error: upErr } = await updateDeal(existingDeal.id, dealRow)
         if (upErr) throw upErr
         deal = updated
       } else {
         // Always insert a new deal for New project / first plan — never hijack another deal.
-        const { data: inserted, error: inErr } = await supabase
-          .from('deals')
-          .insert(dealRow)
-          .select()
-          .single()
+        const { data: inserted, error: inErr } = await insertDeal(dealRow)
         if (inErr) throw inErr
         deal = inserted
       }
 
       // First-month extra (recurring) — upsert so edits stay in sync
       if (data.pricing_model === 'recurring' && firstMonth > 0) {
-        const { data: existingFirst } = await supabase
-          .from('payments')
-          .select('id, paid')
-          .eq('deal_id', deal.id)
-          .eq('kind', 'first_month')
-          .maybeSingle()
+        const { data: existingFirst } = await findFirstMonthPayment(deal.id)
 
         const firstRow = {
           deal_id: deal.id,
@@ -408,10 +396,10 @@ export default function PaymentRecordModal({
             patch.paid = true
             patch.paid_at = today
           }
-          const { error: firstUpErr } = await supabase.from('payments').update(patch).eq('id', existingFirst.id)
+          const { error: firstUpErr } = await patchPayment(existingFirst.id, patch)
           if (firstUpErr) throw firstUpErr
         } else {
-          const { error: firstInErr } = await supabase.from('payments').insert({
+          const { error: firstInErr } = await insertPayment({
             ...firstRow,
             paid: !!data.first_month_paid_today,
             paid_at: data.first_month_paid_today ? today : null,
@@ -421,12 +409,7 @@ export default function PaymentRecordModal({
       }
 
       // First regular collection row — only if none exist yet and no first-month extra
-      const { data: existingPayments } = await supabase
-        .from('payments')
-        .select('id')
-        .eq('deal_id', deal.id)
-        .neq('kind', 'first_month')
-        .limit(1)
+      const { data: existingPayments } = await findRegularPayment(deal.id)
 
       if (!existingPayments?.length && firstMonth <= 0) {
         const pStart = start
@@ -448,34 +431,13 @@ export default function PaymentRecordModal({
           period_start: pStart,
           period_end: pEnd,
         }
-        const { error: payErr } = await supabase.from('payments').insert(paymentRow)
+        const { error: payErr } = await insertPayment(paymentRow)
         if (payErr) throw payErr
       }
 
       // Default onboarding if missing
-      const { data: steps } = await supabase
-        .from('onboarding_steps')
-        .select('id')
-        .eq('client_id', client.id)
-        .limit(1)
-      if (!steps?.length) {
-        const labels = ['Onboarding call', 'Setup & data migration', 'Training session', 'Go-live', 'Client handoff']
-        await supabase.from('onboarding_steps').insert(
-          labels.map((step_label, i) => ({
-            client_id: client.id,
-            step_order: i,
-            step_label,
-            due_date: (() => {
-              const d = new Date(start + 'T00:00:00')
-              d.setDate(d.getDate() + i * 7)
-              const y = d.getFullYear()
-              const m = String(d.getMonth() + 1).padStart(2, '0')
-              const day = String(d.getDate()).padStart(2, '0')
-              return `${y}-${m}-${day}`
-            })(),
-          }))
-        )
-      }
+      const { data: steps } = await hasOnboardingSteps(client.id)
+      if (!steps?.length) await insertDefaultOnboardingSteps(client.id, start)
 
       onSaved?.(deal)
     } catch (err) {

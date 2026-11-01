@@ -1,3 +1,5 @@
+import { toDateStr, todayStr, addDays } from './index'
+
 /** Linked pricing + discount helpers for Payment Record (Phase 1). */
 
 export const CADENCE_OPTIONS = [
@@ -82,10 +84,7 @@ export function addMonths(dateStr, months) {
   const [y, m, d] = String(dateStr).split('-').map(Number)
   const dt = new Date(y, m - 1, d)
   dt.setMonth(dt.getMonth() + Number(months))
-  const yy = dt.getFullYear()
-  const mm = String(dt.getMonth() + 1).padStart(2, '0')
-  const dd = String(dt.getDate()).padStart(2, '0')
-  return `${yy}-${mm}-${dd}`
+  return toDateStr(dt)
 }
 
 /**
@@ -95,9 +94,9 @@ export function addMonths(dateStr, months) {
  */
 export function computeNextReminder(billingStartDate, cadence, customMonths, today = null) {
   if (!billingStartDate) return null
-  const todayStr = today || localToday()
+  const todayDate = today || todayStr()
   const interval = monthsForCadence(cadence, customMonths)
-  if (billingStartDate > todayStr) return billingStartDate
+  if (billingStartDate > todayDate) return billingStartDate
   return addMonths(billingStartDate, interval)
 }
 
@@ -118,15 +117,15 @@ export function computeNextReminderAfterFirstMonth(billingStartDate, cadence, cu
  */
 export function recomputeNextReminderFromSchedule(billingStartDate, cadence, customMonths, today = null) {
   if (!billingStartDate) return null
-  const todayStr = today || localToday()
+  const todayDate = today || todayStr()
   const interval = monthsForCadence(cadence, customMonths)
-  if (billingStartDate > todayStr) return billingStartDate
+  if (billingStartDate > todayDate) return billingStartDate
 
   let cursor = billingStartDate
   let guard = 0
   // Next collection date is the first boundary strictly after start that is >= today.
   // Using start itself if somehow start === today and we want first period due today.
-  while (cursor < todayStr && guard < 120) {
+  while (cursor < todayDate && guard < 120) {
     cursor = addMonths(cursor, interval)
     guard += 1
   }
@@ -137,22 +136,7 @@ export function periodEnd(startDate, cadence, customMonths) {
   if (!startDate) return null
   const months = monthsForCadence(cadence, customMonths)
   // Inclusive period: start .. day before next period
-  const next = addMonths(startDate, months)
-  const [y, m, d] = next.split('-').map(Number)
-  const dt = new Date(y, m - 1, d)
-  dt.setDate(dt.getDate() - 1)
-  const yy = dt.getFullYear()
-  const mm = String(dt.getMonth() + 1).padStart(2, '0')
-  const dd = String(dt.getDate()).padStart(2, '0')
-  return `${yy}-${mm}-${dd}`
-}
-
-function localToday() {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+  return addDays(addMonths(startDate, months), -1)
 }
 
 /** Map to legacy subscription_type / payment_type columns. */

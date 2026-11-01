@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
+import { useRef, useEffect } from 'react'
 import { SOURCES, TEMPERATURES } from '../stages'
 
-export default function FilterBar({ clients, filters, onChange }) {
+export default function FilterBar({ filters, onChange }) {
   const { search, temperature, source, overdueOnly } = filters
   const searchRef = useRef(null)
 

@@ -1,134 +1,23 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { ALL_STAGES, TEMPERATURES, SOURCES, TASK_TYPES } from '../stages'
-import { waLink, formatDateTime, todayStr, formatPhoneDisplay } from '../utils'
-import LeadIntelligencePanel, { SmartNoteDumper } from './LeadIntelligencePanel'
+import { waLink, formatDateTime, todayStr, formatPhoneDisplay, daysFromToday } from '../utils'
+import SmartNoteDumper from './SmartNoteDumper'
+import LeadContactsSection from './LeadContactsSection'
 import ClientTab from './ClientTab'
-import { supabase } from '../supabase'
 
 // ── Additional contacts per lead ──────────────────────────────────────────────
-function LeadContactsSection({ clientId }) {
-  const [contacts, setContacts] = useState([])
-  const [adding, setAdding]     = useState(false)
-  const [newContact, setNewContact] = useState({ name: '', designation: '', phone: '' })
-
-  useEffect(() => {
-    supabase.from('lead_contacts').select('*')
-      .eq('client_id', clientId).order('created_at')
-      .then(({ data }) => setContacts(data || []))
-  }, [clientId])
-
-  async function addContact() {
-    if (!newContact.name.trim()) return
-    const { data } = await supabase.from('lead_contacts').insert({
-      client_id: clientId,
-      name: newContact.name.trim(),
-      designation: newContact.designation.trim() || null,
-      phone: newContact.phone.trim() || null,
-    }).select().single()
-    if (data) setContacts(prev => [...prev, data])
-    setNewContact({ name: '', designation: '', phone: '' })
-    setAdding(false)
-  }
-
-  async function deleteContact(id) {
-    await supabase.from('lead_contacts').delete().eq('id', id)
-    setContacts(prev => prev.filter(c => c.id !== id))
-  }
-
-  async function updateContact(id, field, value) {
-    await supabase.from('lead_contacts').update({ [field]: value }).eq('id', id)
-    setContacts(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c))
-  }
-
-  return (
-    <div style={{ marginBottom: 6 }}>
-      {contacts.map(c => (
-        <div key={c.id} style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '5px 8px', borderRadius: 6, marginBottom: 3,
-          background: 'var(--bg-light)', border: '1px solid var(--border-light)',
-        }}>
-          <input
-            value={c.name}
-            onChange={e => updateContact(c.id, 'name', e.target.value)}
-            placeholder="Name"
-            style={{ flex: 2, fontSize: 12, fontWeight: 600, border: 'none', background: 'transparent', fontFamily: 'var(--font)', color: 'var(--text-dark)' }}
-          />
-          <input
-            value={c.designation || ''}
-            onChange={e => updateContact(c.id, 'designation', e.target.value)}
-            placeholder="Role"
-            style={{ flex: 1, fontSize: 11, border: 'none', background: 'transparent', fontFamily: 'var(--font)', color: 'var(--text-muted)' }}
-          />
-          {c.phone ? (
-            <a
-              href={`tel:${c.phone.replace(/\s/g, '')}`}
-              onClick={e => e.stopPropagation()}
-              style={{ flex: 2, fontSize: 12, color: 'var(--primary)', textDecoration: 'none', letterSpacing: '0.3px', fontFamily: 'var(--font)' }}
-              title="Tap to call"
-            >
-              📞 {formatPhoneDisplay(c.phone)}
-            </a>
-          ) : (
-            <input
-              value={c.phone || ''}
-              onChange={e => updateContact(c.id, 'phone', e.target.value)}
-              placeholder="Phone"
-              style={{ flex: 2, fontSize: 12, border: 'none', background: 'transparent', fontFamily: 'var(--font)', color: 'var(--text-body)' }}
-            />
-          )}
-          <button onClick={() => deleteContact(c.id)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, padding: '0 2px', flexShrink: 0 }} title="Remove">×</button>
-        </div>
-      ))}
-      {adding ? (
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 4 }}>
-          <input
-            autoFocus
-            value={newContact.name}
-            onChange={e => setNewContact(p => ({ ...p, name: e.target.value }))}
-            placeholder="Name *"
-            style={{ flex: 2, fontSize: 12, padding: '4px 6px', border: '1px solid var(--border)', borderRadius: 4, fontFamily: 'var(--font)' }}
-          />
-          <input
-            value={newContact.designation}
-            onChange={e => setNewContact(p => ({ ...p, designation: e.target.value }))}
-            placeholder="Role"
-            style={{ flex: 1, fontSize: 12, padding: '4px 6px', border: '1px solid var(--border)', borderRadius: 4, fontFamily: 'var(--font)' }}
-          />
-          <input
-            value={newContact.phone}
-            onChange={e => setNewContact(p => ({ ...p, phone: e.target.value }))}
-            placeholder="Phone"
-            style={{ flex: 2, fontSize: 12, padding: '4px 6px', border: '1px solid var(--border)', borderRadius: 4, fontFamily: 'var(--font)' }}
-            onKeyDown={e => { if (e.key === 'Enter') addContact(); if (e.key === 'Escape') setAdding(false) }}
-          />
-          <button className="btn btn-primary btn-sm" onClick={addContact} style={{ flexShrink: 0 }}>Add</button>
-          <button onClick={() => setAdding(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>×</button>
-        </div>
-      ) : (
-        <button
-          onClick={() => setAdding(true)}
-          style={{ fontSize: 11, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}
-        >
-          + Add contact person
-        </button>
-      )}
-    </div>
-  )
-}
-
 const LOG_METHODS = ['Phone call', 'WhatsApp', 'Email', 'In person']
 
-function quickDate(daysFromNow) {
-  const d = new Date()
-  d.setDate(d.getDate() + daysFromNow)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-const RIGHT_TABS = ['Log', 'History', 'Discovery']
+// Fields compared against the saved client to detect unsaved edits
+const EDITABLE_FIELDS = [
+  'name','stage','phone','email','company','business_type',
+  'next_action','next_action_due','next_action_time','notes','temperature',
+  'potential_revenue','proposal_value','source','website','pain_point',
+  'current_solution','objection',
+  'discovery_team_size','discovery_monthly_leads','discovery_current_tool',
+  'discovery_lost_deals','discovery_decision_maker','discovery_switch_openness',
+  'discovery_completed_at'
+]
 
 function getLastMethod() {
   try { return localStorage.getItem('lastLogMethod') || 'Phone call' } catch { return 'Phone call' }
@@ -144,44 +33,14 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
   const [logTime, setLogTime]                  = useState('')
   const [showSmartDump, setShowSmartDump]     = useState(false)
   const [rightTab, setRightTab]               = useState('Log')
-  const [savedFlash, setSavedFlash]           = useState(false)
-  const [logSavedFlash, setLogSavedFlash]     = useState(false)
   const [saveWarning, setSaveWarning]         = useState(null)
   const firstInputRef = useRef(null)
-  const flashTimerRef = useRef(null)
-  const logFlashTimerRef = useRef(null)
-
-  useEffect(() => () => {
-    if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
-    if (logFlashTimerRef.current) clearTimeout(logFlashTimerRef.current)
-  }, [])
-
-  function showFlash() {
-    if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
-    setSavedFlash(true)
-    flashTimerRef.current = setTimeout(() => setSavedFlash(false), 2000)
-  }
-
-  function showLogFlash() {
-    if (logFlashTimerRef.current) clearTimeout(logFlashTimerRef.current)
-    setLogSavedFlash(true)
-    logFlashTimerRef.current = setTimeout(() => setLogSavedFlash(false), 1000)
-  }
 
   function handleSetLogMethod(m) {
     setLogMethod(m)
-    try { localStorage.setItem('lastLogMethod', m) } catch {}
+    try { localStorage.setItem('lastLogMethod', m) } catch { /* storage unavailable */ }
   }
 
-  const EDITABLE_FIELDS = [
-    'name','stage','phone','email','company','business_type',
-    'next_action','next_action_due','next_action_time','notes','temperature',
-    'potential_revenue','proposal_value','source','website','pain_point',
-    'current_solution','objection',
-    'discovery_team_size','discovery_monthly_leads','discovery_current_tool',
-    'discovery_lost_deals','discovery_decision_maker','discovery_switch_openness',
-    'discovery_completed_at'
-  ]
   const isDirty = useMemo(() => EDITABLE_FIELDS.some(k => {
     const a = form[k] == null ? '' : String(form[k])
     const b = client[k] == null ? '' : String(client[k])
@@ -387,7 +246,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                 {form.phone && (
                   <a
                     href={`tel:${form.phone.replace(/\s/g, '')}`}
-                    style={{ display: 'block', fontSize: 13, color: 'var(--text2)', marginTop: 4, textDecoration: 'none', letterSpacing: '0.5px' }}
+                    style={{ display: 'block', fontSize: 13, color: 'var(--text-light)', marginTop: 4, textDecoration: 'none', letterSpacing: '0.5px' }}
                   >
                     📞 {formatPhoneDisplay(form.phone)}
                   </a>
@@ -459,18 +318,6 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
           {/* Right: tabbed panel */}
           <div className="detail-history detail-history-wide" style={{ position: 'relative' }}>
 
-            {/* Log saved flash */}
-            {logSavedFlash && (
-              <div style={{
-                position: 'absolute', top: 8, left: 0, right: 0,
-                background: 'var(--success)', color: '#fff',
-                fontSize: 12, fontWeight: 600, textAlign: 'center',
-                padding: '6px', borderRadius: 6, zIndex: 10,
-                animation: 'fadeOut 1s forwards',
-              }}>
-                ✓ Logged
-              </div>
-            )}
 
             {/* Field-save-failed warning — persists until dismissed, since it's
                 important enough that it shouldn't auto-fade like the success flash */}
@@ -547,10 +394,10 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
               <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, paddingRight: 2 }}>
                 {(form.next_action || form.next_action_due) && (
                   <div className="next-action-summary" style={{ marginBottom: 10 }}>
-                    <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 3, fontWeight: 500 }}>NEXT ACTION</div>
-                    {form.next_action && <div style={{ fontSize: 13, color: 'var(--text1)' }}>{form.next_action}</div>}
+                    <div style={{ fontSize: 11, color: 'var(--text-light)', marginBottom: 3, fontWeight: 500 }}>NEXT ACTION</div>
+                    {form.next_action && <div style={{ fontSize: 13, color: 'var(--text-dark)' }}>{form.next_action}</div>}
                     {form.next_action_due && (
-                      <div style={{ fontSize: 12, color: form.next_action_due < todayStr() ? 'var(--danger)' : 'var(--text2)', marginTop: 2 }}>
+                      <div style={{ fontSize: 12, color: form.next_action_due < todayStr() ? 'var(--error)' : 'var(--text-light)', marginTop: 2 }}>
                         Due: {new Date(form.next_action_due + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                         {form.next_action_time && <span style={{ marginLeft: 6, fontWeight: 600 }}>@ {form.next_action_time}</span>}
                       </div>
@@ -561,7 +408,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                 {/* Read-only view of tasks attached to this lead — created/managed from the Tasks tab */}
                 {tasks.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
-                    <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 4, fontWeight: 500 }}>OPEN TASKS</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-light)', marginBottom: 4, fontWeight: 500 }}>OPEN TASKS</div>
                     {tasks.map(t => {
                       const info = TASK_TYPES.find(tt => tt.key === t.task_type) || TASK_TYPES[TASK_TYPES.length - 1]
                       return (
@@ -651,7 +498,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                     </div>
 
                     <div className="field" style={{ marginTop: 10 }}>
-                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happened?</label>
+                      <label style={{ fontSize: 12, color: 'var(--text-light)' }}>What happened?</label>
                       <textarea
                         value={logWhatHappened}
                         onChange={e => setLogWhatHappened(e.target.value)}
@@ -661,7 +508,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                     </div>
 
                     <div className="field">
-                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happens next?</label>
+                      <label style={{ fontSize: 12, color: 'var(--text-light)' }}>What happens next?</label>
                       <input
                         value={logWhatNext}
                         onChange={e => setLogWhatNext(e.target.value)}
@@ -673,11 +520,11 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                     </div>
 
                     <div className="field">
-                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>Due date</label>
+                      <label style={{ fontSize: 12, color: 'var(--text-light)' }}>Due date</label>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <button className={`quick-date-btn ${logDue === quickDate(0) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(0))}>Today</button>
-                        <button className={`quick-date-btn ${logDue === quickDate(1) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(1))}>Tomorrow</button>
-                        <button className={`quick-date-btn ${logDue === quickDate(7) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(7))}>+7 days</button>
+                        <button className={`quick-date-btn ${logDue === daysFromToday(0) ? 'active' : ''}`} onClick={() => setLogDue(daysFromToday(0))}>Today</button>
+                        <button className={`quick-date-btn ${logDue === daysFromToday(1) ? 'active' : ''}`} onClick={() => setLogDue(daysFromToday(1))}>Tomorrow</button>
+                        <button className={`quick-date-btn ${logDue === daysFromToday(7) ? 'active' : ''}`} onClick={() => setLogDue(daysFromToday(7))}>+7 days</button>
                         <input type="date" value={logDue} onChange={e => setLogDue(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
                         {logDue && (
                           <input
@@ -721,19 +568,19 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                       </div>
                     </div>
                     <div className="field" style={{ marginTop: 8 }}>
-                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happened?</label>
+                      <label style={{ fontSize: 12, color: 'var(--text-light)' }}>What happened?</label>
                       <textarea value={logWhatHappened} onChange={e => setLogWhatHappened(e.target.value)} rows={3} />
                     </div>
                     <div className="field">
-                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happens next?</label>
+                      <label style={{ fontSize: 12, color: 'var(--text-light)' }}>What happens next?</label>
                       <input value={logWhatNext} onChange={e => setLogWhatNext(e.target.value)} />
                     </div>
                     <div className="field">
-                      <label style={{ fontSize: 12, color: 'var(--text2)' }}>Due date</label>
+                      <label style={{ fontSize: 12, color: 'var(--text-light)' }}>Due date</label>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <button className={`quick-date-btn ${logDue === quickDate(0) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(0))}>Today</button>
-                        <button className={`quick-date-btn ${logDue === quickDate(1) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(1))}>Tomorrow</button>
-                        <button className={`quick-date-btn ${logDue === quickDate(7) ? 'active' : ''}`} onClick={() => setLogDue(quickDate(7))}>+7 days</button>
+                        <button className={`quick-date-btn ${logDue === daysFromToday(0) ? 'active' : ''}`} onClick={() => setLogDue(daysFromToday(0))}>Today</button>
+                        <button className={`quick-date-btn ${logDue === daysFromToday(1) ? 'active' : ''}`} onClick={() => setLogDue(daysFromToday(1))}>Tomorrow</button>
+                        <button className={`quick-date-btn ${logDue === daysFromToday(7) ? 'active' : ''}`} onClick={() => setLogDue(daysFromToday(7))}>+7 days</button>
                         <input type="date" value={logDue} onChange={e => setLogDue(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
                         {logDue && (
                           <input
@@ -847,9 +694,6 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
             Delete
           </button>
           <div className="spacer" />
-          <span style={{ fontSize: 12, color: 'var(--success)', opacity: savedFlash ? 1 : 0, transition: 'opacity 0.3s' }}>
-            ✓ Saved
-          </span>
           <button className="btn btn-secondary" onClick={() => {
             if (isDirty || hasLog) { if (window.confirm('You have unsaved changes. Close anyway?')) onClose() }
             else onClose()

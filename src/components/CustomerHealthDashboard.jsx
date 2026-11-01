@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../supabase'
+import { listActiveClientsForHealth, listCustomerHealth } from '../api/customerHealth'
 
 export default function CustomerHealthDashboard() {
   const [customers, setCustomers] = useState([])
@@ -14,17 +14,11 @@ export default function CustomerHealthDashboard() {
   async function loadData() {
     setLoading(true)
     try {
-      const { data: clients, error: clientsError } = await supabase
-        .from('clients')
-        .select('id, company, phone, last_contacted_at')
-        .eq('stage', 'active')
-        .order('company')
+      const { data: clients, error: clientsError } = await listActiveClientsForHealth()
 
       if (clientsError) throw clientsError
 
-      const { data: health, error: healthError } = await supabase
-        .from('customer_health')
-        .select('*')
+      const { data: health, error: healthError } = await listCustomerHealth()
 
       if (healthError) throw healthError
 

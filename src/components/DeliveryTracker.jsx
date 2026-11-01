@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../supabase'
+import { listImplementations, insertImplementation, updateImplementation } from '../api/implementations'
+import { listActiveUserNames } from '../api/users'
+import { listActiveDealsForDelivery } from '../api/deals'
 
 export default function DeliveryTracker() {
   const [implementations, setImplementations] = useState([])
@@ -26,9 +28,9 @@ export default function DeliveryTracker() {
     setLoading(true)
     try {
       const [{ data: impls }, { data: usersData }, { data: dealsData }] = await Promise.all([
-        supabase.from('implementations').select('*, deals(company, deal_value), clients(company)').order('created_at', { ascending: false }),
-        supabase.from('users').select('id, name').eq('is_active', true).order('name'),
-        supabase.from('deals').select('id, company, stage, client_id').eq('stage', 'active').order('created_at', { ascending: false })
+        listImplementations(),
+        listActiveUserNames(),
+        listActiveDealsForDelivery(),
       ])
 
       setImplementations(impls || [])
@@ -56,15 +58,10 @@ export default function DeliveryTracker() {
       }
 
       if (selectedImpl) {
-        const { error } = await supabase
-          .from('implementations')
-          .update(dataToSave)
-          .eq('id', selectedImpl.id)
+        const { error } = await updateImplementation(selectedImpl.id, dataToSave)
         if (error) throw error
       } else {
-        const { error } = await supabase
-          .from('implementations')
-          .insert([dataToSave])
+        const { error } = await insertImplementation(dataToSave)
         if (error) throw error
       }
 
@@ -142,7 +139,7 @@ export default function DeliveryTracker() {
         <button 
           onClick={openNew}
           style={{
-            background: '#C2622D',
+            background: 'var(--primary)',
             color: 'white',
             border: 'none',
             padding: '10px 16px',
@@ -431,7 +428,7 @@ export default function DeliveryTracker() {
                 onClick={handleSave}
                 style={{
                   padding: '10px 16px',
-                  background: '#C2622D',
+                  background: 'var(--primary)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',

@@ -156,11 +156,11 @@ export default function ExportModal({ clients, contactLogs, deals = [], payments
             <div key={i} style={{
               display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
               border: '0.5px solid var(--border)', borderRadius: 8, cursor: 'pointer',
-              background: 'var(--surface)'
+              background: 'var(--bg-white)'
             }} onClick={() => { exp.action(); onClose() }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text1)', marginBottom: 2 }}>{exp.title}</div>
-                <div style={{ fontSize: 12, color: 'var(--text2)' }}>{exp.desc}</div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-dark)', marginBottom: 2 }}>{exp.title}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-light)' }}>{exp.desc}</div>
               </div>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>

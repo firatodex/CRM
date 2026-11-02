@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { markPaymentUnpaid } from '../api/payments'
 import { formatCurrency, todayStr } from '../utils'
+import { paymentSplit, sumSplit } from '../utils/gst'
 import { CADENCE_OPTIONS, cadenceLabel } from '../utils/paymentMath'
 import {
   buildCollectionQueue,
@@ -705,8 +706,17 @@ function HistoryTable({ rows, today, onOpenClient, onToggleStatus, statusBusyId 
       />
     )
   }
+  const received = sumSplit(rows.filter(r => r.payment.paid).map(r => r.payment))
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8,
+        padding: '12px 14px', borderRadius: 12, background: 'var(--bg-light)',
+      }}>
+        <SplitStat label="Received" value={received.gross} />
+        <SplitStat label="GST (to government)" value={received.gst} color="var(--warning)" />
+        <SplitStat label="Net to you" value={received.net} color="var(--success)" />
+      </div>
       {rows.map(({ payment, client }) => {
         const overdue = !payment.paid && payment.due_date && payment.due_date < today
         const isCredit = Number(payment.amount) < 0
@@ -745,6 +755,11 @@ function HistoryTable({ rows, today, onOpenClient, onToggleStatus, statusBusyId 
               color: isCredit ? '#a16207' : payment.paid ? '#15803d' : 'var(--text)',
             }}>
               {formatCurrency(payment.amount)}
+              <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>
+                {paymentSplit(payment).gst > 0
+                  ? `GST ${formatCurrency(paymentSplit(payment).gst)} · net ${formatCurrency(paymentSplit(payment).net)}`
+                  : 'No GST'}
+              </div>
             </div>
 
             {payment.paid ? (
@@ -774,6 +789,15 @@ function HistoryTable({ rows, today, onOpenClient, onToggleStatus, statusBusyId 
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function SplitStat({ label, value, color = 'var(--text-dark)' }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 750, color }}>{formatCurrency(value)}</div>
     </div>
   )
 }

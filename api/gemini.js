@@ -118,7 +118,7 @@ async function getSignedInUser(req) {
     if (!r.ok) return null
     var user = await r.json()
     return user && user.id ? user : null
-  } catch (e) {
+  } catch {
     return null
   }
 }

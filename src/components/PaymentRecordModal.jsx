@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { insertDeal, updateDeal } from '../api/deals'
-import { insertPayment, patchPayment, findFirstMonthPayment, findRegularPayment } from '../api/payments'
+import { insertPayment, patchPayment, findFirstMonthPayment, findRegularPayment, setDealPaymentsGstRate } from '../api/payments'
+import { DEFAULT_GST_RATE, gstIncluded } from '../utils/gst'
 import { hasOnboardingSteps, insertDefaultOnboardingSteps } from '../api/onboarding'
 import { paymentRecordSchema } from '../schemas/paymentRecordSchema'
 import {
@@ -55,6 +56,7 @@ export default function PaymentRecordModal({
   const [markPaidToday, setMarkPaidToday] = useState(false)
   const [firstMonthAmount, setFirstMonthAmount] = useState('')
   const [firstMonthPaidToday, setFirstMonthPaidToday] = useState(false)
+  const [gstIncludedInPrice, setGstIncludedInPrice] = useState(true)
 
   useEffect(() => {
     if (!client) return
@@ -100,6 +102,7 @@ export default function PaymentRecordModal({
       setMarkPaidToday(false)
       setFirstMonthAmount(numOrEmpty(existingDeal.first_month_amount > 0 ? existingDeal.first_month_amount : ''))
       setFirstMonthPaidToday(false)
+      setGstIncludedInPrice(existingDeal.gst_applicable !== false && Number(existingDeal.gst_rate) !== 0)
     } else {
       const seed = client.potential_revenue || client.proposal_value || ''
       setProductSold('')
@@ -115,6 +118,7 @@ export default function PaymentRecordModal({
       setMarkPaidToday(false)
       setFirstMonthAmount('')
       setFirstMonthPaidToday(false)
+      setGstIncludedInPrice(true)
     }
     setError(null)
   }, [client?.id, existingDeal?.id])
@@ -363,6 +367,8 @@ export default function PaymentRecordModal({
         subscription_type: legacySubscriptionType(data.pricing_model, data.billing_cadence),
         subscription_start: start,
         delivery_status: existingDeal?.delivery_status ?? false,
+        gst_applicable: gstIncludedInPrice,
+        gst_rate: gstIncludedInPrice ? DEFAULT_GST_RATE : 0,
       }
 
       let deal
@@ -370,6 +376,12 @@ export default function PaymentRecordModal({
         const { data: updated, error: upErr } = await updateDeal(existingDeal.id, dealRow)
         if (upErr) throw upErr
         deal = updated
+        // GST setting changed: keep this deal's existing payments in step with it
+        const wasGst = existingDeal.gst_applicable !== false && Number(existingDeal.gst_rate) !== 0
+        if (wasGst !== gstIncludedInPrice) {
+          const { error: gstErr } = await setDealPaymentsGstRate(deal.id, dealRow.gst_rate)
+          if (gstErr) throw gstErr
+        }
       } else {
         // Always insert a new deal for New project / first plan — never hijack another deal.
         const { data: inserted, error: inErr } = await insertDeal(dealRow)
@@ -651,6 +663,15 @@ export default function PaymentRecordModal({
           />
         </div>
 
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 13, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={gstIncludedInPrice}
+            onChange={e => setGstIncludedInPrice(e.target.checked)}
+          />
+          Amounts include {DEFAULT_GST_RATE}% GST (GST invoice raised)
+        </label>
+
         {pricingModel === 'one_time' && (
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, fontSize: 13, cursor: 'pointer' }}>
             <input
@@ -675,6 +696,12 @@ export default function PaymentRecordModal({
           <Row label="List / plan" value={formatCurrency(discountBase)} />
           <Row label="Discount" value={`${Number(discountPercent) || 0}% · ${formatCurrency(Number(discountAmount) || 0)}`} />
           <Row label="Net payable" value={formatCurrency(net)} bold />
+          {gstIncludedInPrice && net > 0 && (
+            <Row
+              label={`of which GST (${DEFAULT_GST_RATE}%)`}
+              value={`${formatCurrency(gstIncluded(net))} · yours ${formatCurrency(net - gstIncluded(net))}`}
+            />
+          )}
           {pricingModel === 'recurring' && (
             <>
               {hasFirstMonth && (

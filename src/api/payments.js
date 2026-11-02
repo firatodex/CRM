@@ -56,3 +56,8 @@ export function findRegularPayment(dealId) {
 export function findRecurringPeriodPayment(dealId, periodStart) {
   return supabase.from('payments').select('id').eq('deal_id', dealId).eq('period_start', periodStart).eq('kind', 'recurring_period').maybeSingle()
 }
+
+/** Set the GST rate on every payment of a deal (used when a deal's GST setting changes). */
+export function setDealPaymentsGstRate(dealId, gstRate) {
+  return supabase.from('payments').update({ gst_rate: gstRate }).eq('deal_id', dealId)
+}

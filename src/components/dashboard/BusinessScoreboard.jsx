@@ -1,6 +1,12 @@
 import { formatCurrency, todayStr, datePart, addDays } from '../../utils'
 import { addMonths } from '../../utils/paymentMath'
 import MetricCard from './MetricCard'
+import { sumSplit, gstDueDateLabel } from '../../utils/gst'
+
+const monthName = key => {
+  const [y, m] = key.split('-').map(Number)
+  return new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month: 'short' })
+}
 
 export default function BusinessScoreboard({ clients, deals, payments }) {
   // Month keys as 'YYYY-MM' (local), compared against the date part of stored timestamps
@@ -19,10 +25,14 @@ export default function BusinessScoreboard({ clients, deals, payments }) {
   const revenueThisMonth = sumBy(dealsThisMonth, 'deal_value')
   const revenueLastMonth = sumBy(dealsLastMonth, 'deal_value')
 
-  const cashCollectedThisMonth = sumBy(payments.filter(p => p.paid && inMonth(p.paid_at, thisMonth)), 'amount')
+  // Cash is split into GST (owed to the government) and what is actually yours
+  const paidIn = month => payments.filter(p => p.paid && inMonth(p.paid_at, month))
+  const cashThisMonth = sumSplit(paidIn(thisMonth))
+  const cashLastMonth = sumSplit(paidIn(lastMonth))
 
   const pendingPayments = payments.filter(p => !p.paid)
-  const pendingCollection = sumBy(pendingPayments, 'amount')
+  const pending = sumSplit(pendingPayments)
+  const pendingCollection = pending.gross
 
   const dealsWonThisMonth = active.filter(c => inMonth(c.won_at, thisMonth)).length
   const dealsWonLastMonth = active.filter(c => inMonth(c.won_at, lastMonth)).length
@@ -54,16 +64,27 @@ export default function BusinessScoreboard({ clients, deals, payments }) {
           borderColor="var(--primary)"
         />
         <MetricCard 
-          label="Cash Collected"
-          value={formatCurrency(cashCollectedThisMonth)}
-          comparison="paid this month"
+          label="Cash Collected (net)"
+          value={formatCurrency(cashThisMonth.net)}
+          comparison={cashThisMonth.gst > 0
+            ? `${formatCurrency(cashThisMonth.gross)} received − ${formatCurrency(cashThisMonth.gst)} GST`
+            : 'yours, this month'}
           color="var(--success)"
           borderColor="var(--success)"
         />
         <MetricCard 
+          label={`GST to pay · ${monthName(lastMonth)}`}
+          value={formatCurrency(cashLastMonth.gst)}
+          comparison={`file by ${gstDueDateLabel(lastMonth)} · ${monthName(thisMonth)} so far ${formatCurrency(cashThisMonth.gst)}`}
+          color="var(--warning)"
+          borderColor="var(--warning)"
+        />
+        <MetricCard 
           label="Pending Collection"
           value={formatCurrency(pendingCollection)}
-          comparison={pendingPayments.length > 0 ? `${pendingPayments.length} unpaid payment${pendingPayments.length === 1 ? '' : 's'}` : 'All paid'}
+          comparison={pendingPayments.length > 0
+            ? `${pendingPayments.length} unpaid · incl. ${formatCurrency(pending.gst)} GST`
+            : 'All paid'}
           color={pendingCollection > 0 ? 'var(--warning)' : 'var(--success)'}
           borderColor="var(--warning)"
         />

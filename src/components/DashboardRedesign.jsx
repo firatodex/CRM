@@ -104,10 +104,12 @@ function BusinessScoreboard({ clients, deals, payments }) {
   const cashGross = sum(cashRows, 'amount')
   const cashGst = cashRows.reduce((s, p) => s + gstOf(p), 0)
   const gstLastMonth = paidIn(lastMonth).reduce((s, p) => s + gstOf(p), 0)
-  const gstDue = (() => {
-    const [y, m] = lastMonth.split('-').map(Number)
+  // GST for a month is filed and paid by the 20th of the following month
+  const gstDueFor = month => {
+    const [y, m] = month.split('-').map(Number)
     return new Date(y, m, 20).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-  })()
+  }
+  const gstDue = gstDueFor(lastMonth)
 
   const pendingPayments = payments.filter(p => !p.paid && Number(p.amount) > 0)
   const pendingTotal = sum(pendingPayments, 'amount')
@@ -170,6 +172,13 @@ function BusinessScoreboard({ clients, deals, payments }) {
           label={`GST to pay · ${monthName(lastMonth)}`}
           value={formatCurrency(gstLastMonth)}
           comparison={`file by ${gstDue}`}
+          color="var(--warning)"
+          borderColor="var(--warning)"
+        />
+        <MetricCard
+          label={`GST to pay next month · ${monthName(thisMonth)}`}
+          value={formatCurrency(cashGst)}
+          comparison={`collected so far · keep aside, due ${gstDueFor(thisMonth)}`}
           color="var(--warning)"
           borderColor="var(--warning)"
         />

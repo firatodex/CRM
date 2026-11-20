@@ -4,6 +4,7 @@ import {
 } from 'recharts'
 import { useMemo } from 'react'
 import { formatCurrency, todayStr } from '../utils'
+import { addMonths } from '../utils/paymentMath'
 import { PIPELINE_STAGES } from '../stages'
 
 // ════════════════════════════════════════════════════════════════════════════════════════
@@ -58,151 +59,151 @@ function MetricCard({ label, value, comparison, color = 'var(--text-dark)', tren
 }
 
 function BusinessScoreboard({ clients, deals, payments }) {
-  const today = new Date()
-  const currentMonth = today.getMonth()
-  const currentYear = today.getFullYear()
-  const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1
-  const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear
+  // Month keys 'YYYY-MM' in local (IST) time; stored timestamps are compared by their date part
+  const thisMonth = todayStr().slice(0, 7)
+  const lastMonth = addMonths(thisMonth + '-01', -1).slice(0, 7)
+  const monthOf = value => (value ? String(value).split('T')[0].slice(0, 7) : '')
+  const sum = (rows, field) => rows.reduce((s, r) => s + (Number(r[field]) || 0), 0)
+  const pctChange = (now, before) => Math.round(((now - before) / before) * 100)
+  const monthName = key => {
+    const [y, m] = key.split('-').map(Number)
+    return new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month: 'short' })
+  }
+  // GST split of a payment (DB stores gst_amount; fall back to calculating from gst_rate)
+  const gstOf = p => p.gst_amount != null
+    ? Number(p.gst_amount) || 0
+    : ((Number(p.amount) || 0) * (Number(p.gst_rate) || 0)) / (100 + (Number(p.gst_rate) || 0))
 
-  // ── Money Metrics ──────────────────────────────────────────────────────────
   const active = clients.filter(c => c.stage === 'active')
   const dead = clients.filter(c => c.stage === 'dead')
-  const allClosed = [...active, ...dead]
 
-  // Revenue this month (from deals won this month)
-  const dealsThisMonth = deals.filter(d => {
-    if (!d.created_at) return false
-    const datePart = d.created_at.split('T')[0]  // "2026-08-12"
-    const [year, month] = datePart.split('-').map(Number)
-    return month === (currentMonth + 1) && year === currentYear
-  })
-  const revenueThisMonth = dealsThisMonth.reduce((s, d) => s + Number(d.deal_value || 0), 0)
+  // Revenue = new deals closed in the month + recurring bills for that month from older deals
+  const dealById = Object.fromEntries(deals.map(d => [d.id, d]))
+  const revenueFor = month => {
+    const newDeals = deals.filter(d => monthOf(d.created_at) === month)
+    const newDealIds = new Set(newDeals.map(d => d.id))
+    const recurringBills = payments.filter(p =>
+      ['recurring_period', 'first_month'].includes(p.kind)
+      && Number(p.amount) > 0
+      && monthOf(p.due_date) === month
+      && dealById[p.deal_id]
+      && !newDealIds.has(p.deal_id))
+    return {
+      total: sum(newDeals, 'deal_value') + sum(recurringBills, 'amount'),
+      newDeals,
+      recurringTotal: sum(recurringBills, 'amount'),
+    }
+  }
+  const revThis = revenueFor(thisMonth)
+  const revLast = revenueFor(lastMonth)
 
-  // Cash collected this month
-  const paymentsThisMonth = payments.filter(p => {
-    if (!p.paid_at || !p.paid) return false
-    const datePart = p.paid_at.split('T')[0]  // "2026-08-12"
-    const [year, month] = datePart.split('-').map(Number)
-    return month === (currentMonth + 1) && year === currentYear
-  })
-  const cashCollectedThisMonth = paymentsThisMonth.reduce((s, p) => s + Number(p.amount || 0), 0)
+  // Cash actually received, split into GST and what is yours
+  const paidIn = month => payments.filter(p => p.paid && Number(p.amount) > 0 && monthOf(p.paid_at) === month)
+  const cashRows = paidIn(thisMonth)
+  const cashGross = sum(cashRows, 'amount')
+  const cashGst = cashRows.reduce((s, p) => s + gstOf(p), 0)
+  const gstLastMonth = paidIn(lastMonth).reduce((s, p) => s + gstOf(p), 0)
+  const gstDue = (() => {
+    const [y, m] = lastMonth.split('-').map(Number)
+    return new Date(y, m, 20).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+  })()
 
-  // Pending collection (paid: false)
-  const pendingPayments = payments.filter(p => !p.paid)
-  const pendingCollection = pendingPayments.reduce((s, p) => s + Number(p.amount || 0), 0)
+  const pendingPayments = payments.filter(p => !p.paid && Number(p.amount) > 0)
+  const pendingTotal = sum(pendingPayments, 'amount')
+  const today = todayStr()
+  const overdueCount = pendingPayments.filter(p => p.due_date && p.due_date < today).length
 
-  // Deals won this month
-  const dealsWonThisMonth = active.filter(c => {
-    if (!c.won_at) return false
-    const datePart = c.won_at.split('T')[0]  // "2026-08-12"
-    const [year, month] = datePart.split('-').map(Number)
-    return month === (currentMonth + 1) && year === currentYear
-  }).length
+  const wonThisMonth = active.filter(c => monthOf(c.won_at) === thisMonth).length
+  const wonLastMonth = active.filter(c => monthOf(c.won_at) === lastMonth).length
 
-  // Average deal value
-  const avgDealValue = dealsThisMonth.length > 0
-    ? revenueThisMonth / dealsThisMonth.length
-    : 0
+  const avgDeal = revThis.newDeals.length ? sum(revThis.newDeals, 'deal_value') / revThis.newDeals.length : 0
+  const avgDealLast = revLast.newDeals.length ? sum(revLast.newDeals, 'deal_value') / revLast.newDeals.length : 0
 
-  // Win rate (active / (active + dead))
-  const closedCount = allClosed.length
-  const winRatePercent = closedCount > 0 ? ((active.length / closedCount) * 100).toFixed(0) : '—'
+  const closedCount = active.length + dead.length
+  const winRate = closedCount > 0 ? Math.round((active.length / closedCount) * 100) : null
 
-  // Pipeline reserve (contacted + proposal, weighted)
+  // Pipeline reserve is a points score, not rupees: 1 per contacted lead, 7 per proposal sent in the last 30 days
   const contacted = clients.filter(c => c.stage === 'contacted').length
-  const proposal = clients.filter(c => c.stage === 'proposal').length
-  const proposalRecent = clients.filter(c => {
-    if (c.stage !== 'proposal' || !c.proposal_sent_at) return false
-    const datePart = c.proposal_sent_at.split('T')[0]
-    const [year, month, day] = datePart.split('-').map(Number)
-    const sentDate = new Date(year, month - 1, day)
-    const now = new Date()
-    const daysSinceSent = Math.floor((now - sentDate) / (1000 * 60 * 60 * 24))
-    return daysSinceSent <= 30
+  const proposals = clients.filter(c => c.stage === 'proposal')
+  const cutoff = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d })()
+  const freshProposals = proposals.filter(c => {
+    if (!c.proposal_sent_at) return false
+    const [y, m, d] = String(c.proposal_sent_at).split('T')[0].split('-').map(Number)
+    return new Date(y, m - 1, d) >= cutoff
   }).length
-  const reserve = (contacted * 1) + (proposalRecent * 7)
-
-  // Active proposals
-  const activeProposals = proposal
-
-  // Comparisons with last month
-  const dealsLastMonth = deals.filter(d => {
-    if (!d.created_at) return false
-    const datePart = d.created_at.split('T')[0]
-    const [year, month] = datePart.split('-').map(Number)
-    return month === lastMonth && year === lastMonthYear
-  })
-  const revenueLastMonth = dealsLastMonth.reduce((s, d) => s + Number(d.deal_value || 0), 0)
-
-  const dealsWonLastMonth = allClosed.filter(c => {
-    if (!c.won_at) return false
-    const datePart = c.won_at.split('T')[0]
-    const [year, month] = datePart.split('-').map(Number)
-    return month === lastMonth && year === lastMonthYear
-  }).length
+  const reservePoints = contacted + freshProposals * 7
+  const proposalValue = sum(proposals, 'potential_revenue')
 
   return (
     <div className="dash-card">
       <div className="dash-card-title" style={{ marginBottom: 16 }}>Business Scoreboard</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
-        {/* Revenue Section */}
-        <MetricCard 
+        <MetricCard
           label="Revenue This Month"
-          value={formatCurrency(revenueThisMonth)}
-          comparison={revenueLastMonth > 0 ? `${((revenueThisMonth - revenueLastMonth) / revenueLastMonth * 100).toFixed(0)}% vs last month` : 'First month'}
-          trend={revenueThisMonth > revenueLastMonth ? 'up' : 'down'}
+          value={formatCurrency(revThis.total)}
+          comparison={revLast.total > 0
+            ? `${pctChange(revThis.total, revLast.total)}% vs ${monthName(lastMonth)} (${formatCurrency(revLast.total)})`
+            : `nothing in ${monthName(lastMonth)}`}
+          trend={revThis.total >= revLast.total ? 'up' : 'down'}
           borderColor="var(--primary)"
         />
-        <MetricCard 
+        <MetricCard
           label="Cash Collected"
-          value={formatCurrency(cashCollectedThisMonth)}
-          comparison={`${cashCollectedThisMonth > revenueThisMonth ? '+' : ''}${formatCurrency(cashCollectedThisMonth - revenueThisMonth)}`}
-          color={cashCollectedThisMonth >= revenueThisMonth * 0.7 ? 'var(--success)' : 'var(--text-dark)'}
+          value={formatCurrency(cashGross - cashGst)}
+          comparison={cashGst > 0
+            ? `yours, after ${formatCurrency(cashGst)} GST (${formatCurrency(cashGross)} received)`
+            : `yours, ${cashRows.length} payment${cashRows.length === 1 ? '' : 's'}`}
+          color="var(--success)"
           borderColor="var(--success)"
         />
-        <MetricCard 
+        <MetricCard
           label="Pending Collection"
-          value={formatCurrency(pendingCollection)}
-          comparison={pendingCollection > 0 ? `${(pendingCollection / revenueThisMonth * 100).toFixed(0)}% of revenue` : 'All paid'}
-          color={pendingCollection > 0 ? 'var(--warning)' : 'var(--success)'}
+          value={formatCurrency(pendingTotal)}
+          comparison={pendingPayments.length > 0
+            ? `${pendingPayments.length} unpaid${overdueCount ? ` · ${overdueCount} overdue` : ''}`
+            : 'All paid'}
+          color={pendingTotal > 0 ? 'var(--warning)' : 'var(--success)'}
           borderColor="var(--warning)"
         />
-
-        {/* Sales Output Section */}
-        <MetricCard 
+        <MetricCard
+          label={`GST to pay · ${monthName(lastMonth)}`}
+          value={formatCurrency(gstLastMonth)}
+          comparison={`file by ${gstDue}`}
+          color="var(--warning)"
+          borderColor="var(--warning)"
+        />
+        <MetricCard
           label="Deals Won This Month"
-          value={dealsWonThisMonth}
-          comparison={dealsWonLastMonth > 0 ? `${dealsWonThisMonth - dealsWonLastMonth > 0 ? '+' : ''}${dealsWonThisMonth - dealsWonLastMonth} vs last month` : 'First month'}
-          trend={dealsWonThisMonth > dealsWonLastMonth ? 'up' : 'down'}
+          value={wonThisMonth}
+          comparison={`${wonLastMonth} in ${monthName(lastMonth)}`}
+          trend={wonThisMonth >= wonLastMonth ? 'up' : 'down'}
           borderColor="var(--primary)"
         />
-        <MetricCard 
+        <MetricCard
           label="Average Deal Value"
-          value={formatCurrency(Math.round(avgDealValue))}
-          comparison={dealsLastMonth.length > 0 ? `${((avgDealValue - dealsLastMonth.reduce((s, d) => s + Number(d.deal_value || 0), 0) / dealsLastMonth.length) / (dealsLastMonth.reduce((s, d) => s + Number(d.deal_value || 0), 0) / dealsLastMonth.length) * 100).toFixed(0)}% trend` : 'New'}
+          value={formatCurrency(avgDeal)}
+          comparison={avgDealLast > 0 ? `${formatCurrency(avgDealLast)} in ${monthName(lastMonth)}` : `nothing in ${monthName(lastMonth)}`}
           color="var(--primary)"
           borderColor="var(--primary)"
         />
-        <MetricCard 
+        <MetricCard
           label="Win Rate"
-          value={`${winRatePercent}%`}
+          value={winRate === null ? '—' : `${winRate}%`}
           comparison={`${active.length} won, ${dead.length} lost`}
-          color={winRatePercent > 30 ? 'var(--success)' : winRatePercent > 10 ? 'var(--primary)' : 'var(--error)'}
+          color={winRate > 30 ? 'var(--success)' : winRate > 10 ? 'var(--primary)' : 'var(--error)'}
           borderColor="#5E8FC0"
         />
-
-        {/* Future Section */}
-        <MetricCard 
+        <MetricCard
           label="Pipeline Reserve"
-          value={formatCurrency(reserve)}
-          comparison={revenueThisMonth > 0 ? `${(reserve / revenueThisMonth).toFixed(1)}× monthly target` : 'No sales yet'}
+          value={`${reservePoints} pts`}
+          comparison={`${contacted} contacted + ${freshProposals} fresh proposals × 7`}
           color="var(--primary)"
           borderColor="var(--primary)"
         />
-        <MetricCard 
+        <MetricCard
           label="Active Proposals"
-          value={activeProposals}
-          comparison={activeProposals > 0 ? `${formatCurrency(Math.round(reserve / activeProposals))}/proposal` : 'None'}
+          value={proposals.length}
+          comparison={proposalValue > 0 ? `${formatCurrency(proposalValue)} potential` : 'no value entered'}
           color="var(--primary)"
           borderColor="#5E8FC0"
         />

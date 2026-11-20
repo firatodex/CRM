@@ -115,6 +115,16 @@ function BusinessScoreboard({ clients, deals, payments, gstPaid = [] }) {
   const lastMonthGstOpen = !lastMonthPaid && gstLastMonth >= 1
   const gstOverdue = lastMonthGstOpen && Number(todayStr().slice(8, 10)) > 20
 
+  // GST paid to the government: latest payment, total, and earlier months with GST not yet marked paid
+  const latestGstPaid = gstPaid.reduce((a, g) => (!a || g.period > a.period ? g : a), null)
+  const totalGstPaid = sum(gstPaid, 'amount')
+  const paidPeriods = new Set(gstPaid.map(g => g.period))
+  const unpaidMonths = [...new Set(payments
+    .filter(p => p.paid && gstOf(p) >= 1)
+    .map(p => monthOf(p.paid_at)))]
+    .filter(m => m && m < lastMonth && !paidPeriods.has(m))
+    .sort()
+
   const pendingPayments = payments.filter(p => !p.paid && Number(p.amount) > 0)
   const pendingTotal = sum(pendingPayments, 'amount')
   const today = todayStr()
@@ -228,129 +238,17 @@ function BusinessScoreboard({ clients, deals, payments, gstPaid = [] }) {
           color="var(--primary)"
           borderColor="#5E8FC0"
         />
+        <MetricCard
+          label="GST Paid"
+          value={latestGstPaid ? formatCurrency(latestGstPaid.amount) : '—'}
+          comparison={latestGstPaid
+            ? `${monthName(latestGstPaid.period)} · paid ${new Date(latestGstPaid.paid_at + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · ${formatCurrency(totalGstPaid)} total`
+              + (unpaidMonths.length ? ` · not recorded: ${unpaidMonths.map(monthName).join(', ')}` : '')
+            : 'none recorded yet'}
+          color="var(--text-dark)"
+          borderColor="var(--warning)"
+        />
       </div>
-    </div>
-  )
-}
-
-// ════════════════════════════════════════════════════════════════════════════════════════
-// SECTION: GST TRACKER — collected vs paid to the government, per month
-// ════════════════════════════════════════════════════════════════════════════════════════
-function GstTracker({ payments, gstPaid, onSaved }) {
-  const thisMonth = todayStr().slice(0, 7)
-  const monthOf = v => (v ? String(v).split('T')[0].slice(0, 7) : '')
-  const gstOf = p => p.gst_amount != null
-    ? Number(p.gst_amount) || 0
-    : ((Number(p.amount) || 0) * (Number(p.gst_rate) || 0)) / (100 + (Number(p.gst_rate) || 0))
-  const label = key => {
-    const [y, m] = key.split('-').map(Number)
-    return new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
-  }
-  const dueLabel = key => {
-    const [y, m] = key.split('-').map(Number)
-    return new Date(y, m, 20).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-  }
-  const paidByPeriod = Object.fromEntries(gstPaid.map(g => [g.period, g]))
-
-  const rows = Array.from({ length: 6 }, (_, i) => addMonths(thisMonth + '-01', -i).slice(0, 7)).map(key => ({
-    key,
-    collected: Math.round(payments
-      .filter(p => p.paid && Number(p.amount) > 0 && monthOf(p.paid_at) === key)
-      .reduce((s, p) => s + gstOf(p), 0)),
-    paid: paidByPeriod[key] || null,
-  })).filter(r => r.collected > 0 || r.paid || r.key === thisMonth)
-
-  const [drafts, setDrafts] = useState({})
-  const [busy, setBusy] = useState(null)
-  const [error, setError] = useState(null)
-
-  async function markPaid(row) {
-    const draft = drafts[row.key] || {}
-    const amount = Number(draft.amount ?? row.collected)
-    const paidAt = draft.date || todayStr()
-    if (!(amount >= 0)) { setError('Enter the amount paid'); return }
-    setBusy(row.key); setError(null)
-    const { error: err } = await supabase.from('gst_payments').insert({ period: row.key, amount, paid_at: paidAt })
-    setBusy(null)
-    if (err) { setError(err.message); return }
-    onSaved?.()
-  }
-
-  async function undo(row) {
-    setBusy(row.key); setError(null)
-    const { error: err } = await supabase.from('gst_payments').delete().eq('period', row.key)
-    setBusy(null)
-    if (err) { setError(err.message); return }
-    onSaved?.()
-  }
-
-  const totalPaid = gstPaid.reduce((s, g) => s + (Number(g.amount) || 0), 0)
-  const cell = { padding: '8px 10px', borderBottom: '1px solid var(--border-light)', fontSize: 13, textAlign: 'left' }
-  const head = { ...cell, fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }
-
-  return (
-    <div className="dash-card">
-      <div className="dash-card-title">GST — collected vs paid</div>
-      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-        Each month's GST is paid by the 20th of the next month. Mark it paid here once it's filed.
-        {totalPaid > 0 && <> Paid so far: <b>{formatCurrency(totalPaid)}</b>.</>}
-      </div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={head}>Month</th>
-              <th style={head}>GST collected</th>
-              <th style={head}>Due</th>
-              <th style={head}>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(row => {
-              const isCurrent = row.key === thisMonth
-              const overdue = !row.paid && !isCurrent && row.key < thisMonth
-                && (todayStr() > addMonths(row.key + '-01', 1).slice(0, 8) + '20')
-              const draft = drafts[row.key] || {}
-              return (
-                <tr key={row.key}>
-                  <td style={cell}>{label(row.key)}</td>
-                  <td style={cell}>{formatCurrency(row.collected)}{isCurrent ? ' so far' : ''}</td>
-                  <td style={{ ...cell, color: overdue ? 'var(--error)' : 'inherit' }}>
-                    {dueLabel(row.key)}{overdue ? ' · overdue' : ''}
-                  </td>
-                  <td style={cell}>
-                    {row.paid ? (
-                      <span style={{ color: 'var(--success)' }}>
-                        Paid {formatCurrency(row.paid.amount)} on {new Date(row.paid.paid_at + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                        {' '}
-                        <button type="button" onClick={() => undo(row)} disabled={busy === row.key}
-                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', textDecoration: 'underline', cursor: 'pointer', fontSize: 11 }}>
-                          undo
-                        </button>
-                      </span>
-                    ) : isCurrent ? (
-                      <span style={{ color: 'var(--text-muted)' }}>Collecting</span>
-                    ) : (
-                      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <input type="number" min="0" style={{ width: 90, fontSize: 12 }}
-                          value={draft.amount ?? row.collected}
-                          onChange={e => setDrafts(d => ({ ...d, [row.key]: { ...draft, amount: e.target.value } }))} />
-                        <input type="date" style={{ fontSize: 12 }}
-                          value={draft.date ?? todayStr()}
-                          onChange={e => setDrafts(d => ({ ...d, [row.key]: { ...draft, date: e.target.value } }))} />
-                        <button type="button" className="btn btn-primary btn-sm" disabled={busy === row.key} onClick={() => markPaid(row)}>
-                          {busy === row.key ? '…' : 'Mark paid'}
-                        </button>
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-      {error && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--error)' }}>{error}</div>}
     </div>
   )
 }
@@ -1188,11 +1086,10 @@ function BottleneckAnalysis({ clients, contactLogs }) {
 // ════════════════════════════════════════════════════════════════════════════════════════
 export default function DashboardRedesign({ clients = [], contactLogs = [], deals = [], payments = [], pipelineSnapshots = [] }) {
   const [gstPaid, setGstPaid] = useState([])
-  async function loadGstPaid() {
-    const { data, error } = await supabase.from('gst_payments').select('*').order('period', { ascending: false })
-    if (!error && data) setGstPaid(data)
-  }
-  useEffect(() => { loadGstPaid() }, [])
+  useEffect(() => {
+    supabase.from('gst_payments').select('*').order('period', { ascending: false })
+      .then(({ data, error }) => { if (!error && data) setGstPaid(data) })
+  }, [])
 
   const isLoading = clients.length === 0 && contactLogs.length === 0
 
@@ -1208,9 +1105,6 @@ export default function DashboardRedesign({ clients = [], contactLogs = [], deal
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '24px' }}>
       {/* Section 1: Business Scoreboard */}
       <BusinessScoreboard clients={clients} deals={deals} payments={payments} gstPaid={gstPaid} />
-
-      {/* GST collected vs paid */}
-      <GstTracker payments={payments} gstPaid={gstPaid} onSaved={loadGstPaid} />
 
       {/* Section 2: THE THREE CORE GRAPHS */}
       {/* Graph 1: Contact Activity */}

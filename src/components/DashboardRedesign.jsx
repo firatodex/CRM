@@ -19,6 +19,24 @@ function toLocalDateStr(date) {
 
 // ════════════════════════════════════════════════════════════════════════════════════════
 // HELPER: Convert UTC to IST date string
+// Revenue booked in a month ('YYYY-MM'): value of deals closed that month
+// + recurring bills for that month from deals closed earlier. Used by the scoreboard and the chart.
+function revenueForMonth(deals, payments, month) {
+  const monthOf = v => (v ? String(v).split('T')[0].slice(0, 7) : '')
+  const newDeals = deals.filter(d => monthOf(d.created_at) === month)
+  const newIds = new Set(newDeals.map(d => d.id))
+  const dealIds = new Set(deals.map(d => d.id))
+  const bills = payments.filter(p =>
+    ['recurring_period', 'first_month'].includes(p.kind)
+    && Number(p.amount) > 0
+    && monthOf(p.due_date) === month
+    && dealIds.has(p.deal_id)
+    && !newIds.has(p.deal_id))
+  const newValue = newDeals.reduce((s, d) => s + (Number(d.deal_value) || 0), 0)
+  const recurring = bills.reduce((s, p) => s + (Number(p.amount) || 0), 0)
+  return { total: newValue + recurring, newDeals, newValue, recurring }
+}
+
 // ════════════════════════════════════════════════════════════════════════════════════════
 function toISTDateStr(contactedAtString) {
   // Database stores timestamps as: "2026-08-12T18:34:15.287+05:30"
@@ -77,25 +95,8 @@ function BusinessScoreboard({ clients, deals, payments }) {
   const active = clients.filter(c => c.stage === 'active')
   const dead = clients.filter(c => c.stage === 'dead')
 
-  // Revenue = new deals closed in the month + recurring bills for that month from older deals
-  const dealById = Object.fromEntries(deals.map(d => [d.id, d]))
-  const revenueFor = month => {
-    const newDeals = deals.filter(d => monthOf(d.created_at) === month)
-    const newDealIds = new Set(newDeals.map(d => d.id))
-    const recurringBills = payments.filter(p =>
-      ['recurring_period', 'first_month'].includes(p.kind)
-      && Number(p.amount) > 0
-      && monthOf(p.due_date) === month
-      && dealById[p.deal_id]
-      && !newDealIds.has(p.deal_id))
-    return {
-      total: sum(newDeals, 'deal_value') + sum(recurringBills, 'amount'),
-      newDeals,
-      recurringTotal: sum(recurringBills, 'amount'),
-    }
-  }
-  const revThis = revenueFor(thisMonth)
-  const revLast = revenueFor(lastMonth)
+  const revThis = revenueForMonth(deals, payments, thisMonth)
+  const revLast = revenueForMonth(deals, payments, lastMonth)
 
   // Cash actually received, split into GST and what is yours
   const paidIn = month => payments.filter(p => p.paid && Number(p.amount) > 0 && monthOf(p.paid_at) === month)
@@ -215,51 +216,30 @@ function BusinessScoreboard({ clients, deals, payments }) {
 // ════════════════════════════════════════════════════════════════════════════════════════
 // SECTION: REVENUE REALIZATION (6-MONTH HISTORY)
 // ════════════════════════════════════════════════════════════════════════════════════════
-function RevenueRealization({ deals }) {
-  const monthlyData = {}
-  const now = new Date()
-
-  // Generate last 6 months
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const monthKey = d.toLocaleDateString('en-IN', { year: '2-digit', month: 'short' })
-    monthlyData[monthKey] = { revenue: 0, dealCount: 0, avgDeal: 0 }
-  }
-
-  // Populate with deal data
-  deals.forEach(d => {
-    if (!d.created_at) return
-    const datePart = d.created_at.split('T')[0]  // "2026-08-12"
-    const [year, month] = datePart.split('-').map(Number)
-    // Create a local date object for display (just for month key)
-    const dateForDisplay = new Date(year, month - 1, 1)
-    const monthKey = dateForDisplay.toLocaleDateString('en-IN', { year: '2-digit', month: 'short' })
-    if (monthlyData[monthKey]) {
-      monthlyData[monthKey].revenue += Number(d.deal_value || 0)
-      monthlyData[monthKey].dealCount += 1
-    }
+function RevenueRealization({ deals, payments }) {
+  const thisMonthStart = todayStr().slice(0, 7) + '-01'
+  const monthly = Array.from({ length: 6 }, (_, i) => {
+    const key = addMonths(thisMonthStart, i - 5).slice(0, 7)
+    const [y, m] = key.split('-').map(Number)
+    const label = new Date(y, m - 1, 1).toLocaleDateString('en-IN', { year: '2-digit', month: 'short' })
+    return { label, ...revenueForMonth(deals, payments, key) }
   })
 
-  // Calculate averages
-  Object.keys(monthlyData).forEach(month => {
-    if (monthlyData[month].dealCount > 0) {
-      monthlyData[month].avgDeal = Math.round(monthlyData[month].revenue / monthlyData[month].dealCount)
-    }
-  })
-
-  const data = Object.entries(monthlyData).map(([month, stats]) => ({
-    month,
-    revenue: Math.round(stats.revenue / 1000), // in thousands for readability
-    dealCount: stats.dealCount,
-    avgDeal: stats.avgDeal,
+  const data = monthly.map(m => ({
+    month: m.label,
+    revenue: Math.round(m.total / 1000), // in thousands for readability
+    dealCount: m.newDeals.length,
+    avgDeal: m.newDeals.length ? Math.round(m.newValue / m.newDeals.length) : 0,
   }))
 
-  const totalRevenue = data.reduce((s, d) => s + d.revenue, 0) * 1000
-  const avgMonthly = Math.round(totalRevenue / data.length)
-  const latestMonth = data[data.length - 1]
-  const prevMonth = data[data.length - 2]
-  const monthOverMonthChange = prevMonth && prevMonth.revenue > 0 
-    ? Math.round(((latestMonth.revenue - prevMonth.revenue) / prevMonth.revenue) * 100)
+  const totalRevenue = monthly.reduce((s, m) => s + m.total, 0)
+  const avgMonthly = Math.round(totalRevenue / monthly.length)
+  const latest = monthly[monthly.length - 1]
+  const prev = monthly[monthly.length - 2]
+  const latestMonth = { ...data[data.length - 1], revenue: latest.total / 1000 }
+  const prevMonth = prev ? { ...data[data.length - 2], revenue: prev.total / 1000 } : null
+  const monthOverMonthChange = prev && prev.total > 0
+    ? Math.round(((latest.total - prev.total) / prev.total) * 100)
     : 0
 
   return (
@@ -1085,7 +1065,7 @@ export default function DashboardRedesign({ clients = [], contactLogs = [], deal
       <ContactActivityGraph contactLogs={contactLogs} />
 
       {/* Section 3: Revenue Realization */}
-      <RevenueRealization deals={deals} />
+      <RevenueRealization deals={deals} payments={payments} />
 
       {/* Graph 2: Pipeline Reserve (THE MOST IMPORTANT) */}
       <PipelineReserveGraph clients={clients} pipelineSnapshots={pipelineSnapshots} />

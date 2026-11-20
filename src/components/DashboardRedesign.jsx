@@ -309,7 +309,7 @@ function RevenueRealization({ deals, payments }) {
                 }}
               />
               {/* Revenue line — orange, left axis */}
-              <Line 
+              <Line isAnimationActive={false} 
                 yAxisId="revenue"
                 type="monotone" 
                 dataKey="revenue" 
@@ -319,7 +319,7 @@ function RevenueRealization({ deals, payments }) {
                 name="revenue"
               />
               {/* Deal count line — blue, right axis */}
-              <Line 
+              <Line isAnimationActive={false} 
                 yAxisId="deals"
                 type="monotone" 
                 dataKey="dealCount" 
@@ -483,8 +483,8 @@ function PipelineReserveGraph({ clients, pipelineSnapshots }) {
                   return [v, name]
                 }}
               />
-              <Line yAxisId="reserve" type="monotone" dataKey="reserve" stroke="var(--primary)" strokeWidth={2.5} dot={false} name="reserve" />
-              <Line yAxisId="proposals" type="monotone" dataKey="proposals" stroke="#5E8FC0" strokeWidth={1.5} dot={false} strokeDasharray="4 2" name="proposals" />
+              <Line isAnimationActive={false} yAxisId="reserve" type="monotone" dataKey="reserve" stroke="var(--primary)" strokeWidth={2.5} dot={false} name="reserve" />
+              <Line isAnimationActive={false} yAxisId="proposals" type="monotone" dataKey="proposals" stroke="#5E8FC0" strokeWidth={1.5} dot={false} strokeDasharray="4 2" name="proposals" />
               <Scatter
                 yAxisId="reserve"
                 dataKey="wins"
@@ -615,7 +615,7 @@ function ContactActivityGraph({ contactLogs }) {
       idx,
       daysAgo,
       fullDate: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-      showLabel: daysAgo === 0 || d.getDate() === 1 || daysAgo % 14 === 0,
+      showLabel: daysAgo % 14 === 0,
       shortLabel: daysAgo === 0 ? 'Today' : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
       contacts,
       avg7,
@@ -635,10 +635,11 @@ function ContactActivityGraph({ contactLogs }) {
       </div>
 
       <ResponsiveContainer width="100%" height={240}>
-        <LineChart data={activityData} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
+        <LineChart data={activityData} margin={{ top: 4, right: 20, left: -24, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
           <XAxis 
-            dataKey="shortLabel"
+            dataKey="idx"
+            interval={0}
             tick={({ x, y, payload }) => {
               const entry = activityData[payload.value]
               if (!entry?.showLabel) return null
@@ -665,9 +666,9 @@ function ContactActivityGraph({ contactLogs }) {
             }}
           />
           {/* Daily contacts — blue line, subtle, smooth curve */}
-          <Line type="monotone" dataKey="contacts" stroke="#5E8FC0" strokeWidth={1.5} dot={false} name="contacts" opacity={0.6} />
+          <Line isAnimationActive={false} type="monotone" dataKey="contacts" stroke="#5E8FC0" strokeWidth={1.5} dot={false} name="contacts" opacity={0.6} />
           {/* 7-day average — orange line, bold, smooth curve */}
-          <Line type="monotone" dataKey="avg7" stroke="var(--primary)" strokeWidth={2.5} dot={false} name="avg7" />
+          <Line isAnimationActive={false} type="monotone" dataKey="avg7" stroke="var(--primary)" strokeWidth={2.5} dot={false} name="avg7" />
         </LineChart>
       </ResponsiveContainer>
 
@@ -797,7 +798,7 @@ function SalesCycleAnalysis({ clients, contactLogs }) {
                   return [v, name]
                 }}
               />
-              <Line 
+              <Line isAnimationActive={false} 
                 type="monotone" 
                 dataKey="avgDays" 
                 stroke="var(--primary)" 
@@ -926,7 +927,7 @@ function PipelineAge({ clients }) {
               <XAxis dataKey="age" tick={{ fontSize: 9, fill: 'var(--text-muted)' }} />
               <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
               <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} />
-              <Bar dataKey="count" fill="var(--primary)" radius={[6, 6, 0, 0]} />
+              <Bar isAnimationActive={false} dataKey="count" fill="var(--primary)" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -939,7 +940,7 @@ function PipelineAge({ clients }) {
               <XAxis dataKey="age" tick={{ fontSize: 9, fill: 'var(--text-muted)' }} />
               <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
               <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} />
-              <Bar dataKey="count" fill={proposalAgeGroups['30+d'] > 0 ? 'var(--error)' : 'var(--primary)'} radius={[6, 6, 0, 0]} />
+              <Bar isAnimationActive={false} dataKey="count" fill={proposalAgeGroups['30+d'] > 0 ? 'var(--error)' : 'var(--primary)'} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

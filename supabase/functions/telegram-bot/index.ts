@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { digits, loadPhonebook, phoneLines } from "./phonebook.ts";
 
-const TELEGRAM_TOKEN = "8689202129:AAEuw-pri-q6CZ-cBxbgvKs5moP_HxC-Gi0";
+const TELEGRAM_TOKEN = Deno.env.get("TELEGRAM_TOKEN") ?? "<set in deployed function>";
 const CHAT_ID = "933636460";
 const BOT_URL = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
 

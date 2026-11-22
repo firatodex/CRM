@@ -8,7 +8,7 @@ serve(async () => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  const TELEGRAM_TOKEN = "8689202129:AAEuw-pri-q6CZ-cBxbgvKs5moP_HxC-Gi0";
+  const TELEGRAM_TOKEN = Deno.env.get("TELEGRAM_TOKEN") ?? "<set in deployed function>";
   const CHAT_ID = "933636460";
 
   const now = new Date();

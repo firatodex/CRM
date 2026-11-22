@@ -79,6 +79,20 @@ export function waLink(phone) {
 // prefix if present. Does NOT mutate stored data — purely cosmetic on render.
 // Numbers that aren't a clean 10-digit Indian mobile (e.g. international numbers,
 // landlines with extensions) are returned unchanged so nothing is misrepresented.
+/** Core digits of a phone for matching: strips spaces, +91 / 91 / 0 prefixes. */
+export function phoneDigits(phone) {
+  const digits = String(phone || '').replace(/\D/g, '')
+  if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2)
+  if (digits.length === 11 && digits.startsWith('0')) return digits.slice(1)
+  return digits
+}
+
+/** True when two stored phone numbers are the same number. */
+export function samePhone(a, b) {
+  const x = phoneDigits(a), y = phoneDigits(b)
+  return !!x && x === y
+}
+
 export function formatPhoneDisplay(phone) {
   if (!phone) return phone
   const digits = phone.replace(/\D/g, '')

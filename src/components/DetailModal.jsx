@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { ALL_STAGES, TEMPERATURES, SOURCES, TASK_TYPES } from '../stages'
-import { waLink, formatDateTime, todayStr, formatPhoneDisplay } from '../utils'
+import { waLink, formatDateTime, todayStr, formatPhoneDisplay, samePhone } from '../utils'
 import LeadIntelligencePanel, { SmartNoteDumper } from './LeadIntelligencePanel'
 import ClientTab from './ClientTab'
 import { supabase } from '../supabase'
 
 // ── Additional contacts per lead ──────────────────────────────────────────────
-function LeadContactsSection({ clientId }) {
+function LeadContactsSection({ clientId, onContactsChange, lastDialedPhone, onDial }) {
   const [contacts, setContacts] = useState([])
   const [adding, setAdding]     = useState(false)
   const [newContact, setNewContact] = useState({ name: '', designation: '', phone: '' })
@@ -16,6 +16,8 @@ function LeadContactsSection({ clientId }) {
       .eq('client_id', clientId).order('created_at')
       .then(({ data }) => setContacts(data || []))
   }, [clientId])
+
+  useEffect(() => { onContactsChange?.(contacts) }, [contacts]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function addContact() {
     if (!newContact.name.trim()) return
@@ -52,22 +54,27 @@ function LeadContactsSection({ clientId }) {
             value={c.name}
             onChange={e => updateContact(c.id, 'name', e.target.value)}
             placeholder="Name"
-            style={{ flex: 2, fontSize: 12, fontWeight: 600, border: 'none', background: 'transparent', fontFamily: 'var(--font)', color: 'var(--text-dark)' }}
+            style={{ flex: 2, minWidth: 0, fontSize: 12, fontWeight: 600, border: 'none', background: 'transparent', fontFamily: 'var(--font)', color: 'var(--text-dark)' }}
           />
           <input
             value={c.designation || ''}
             onChange={e => updateContact(c.id, 'designation', e.target.value)}
             placeholder="Role"
-            style={{ flex: 1, fontSize: 11, border: 'none', background: 'transparent', fontFamily: 'var(--font)', color: 'var(--text-muted)' }}
+            style={{ flex: 1, minWidth: 0, fontSize: 11, border: 'none', background: 'transparent', fontFamily: 'var(--font)', color: 'var(--text-muted)' }}
           />
           {c.phone ? (
             <a
               href={`tel:${c.phone.replace(/\s/g, '')}`}
-              onClick={e => e.stopPropagation()}
-              style={{ flex: 2, fontSize: 12, color: 'var(--primary)', textDecoration: 'none', letterSpacing: '0.3px', fontFamily: 'var(--font)' }}
+              onClick={e => { e.stopPropagation(); onDial?.(c.phone) }}
+              style={{ flex: 3, minWidth: 0, whiteSpace: 'nowrap', fontSize: 12, color: 'var(--primary)', textDecoration: 'none', letterSpacing: '0.3px', fontFamily: 'var(--font)' }}
               title="Tap to call"
             >
               📞 {formatPhoneDisplay(c.phone)}
+              {lastDialedPhone && samePhone(lastDialedPhone, c.phone) && (
+                <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#16a34a', background: 'rgba(22,163,74,0.1)', borderRadius: 4, padding: '1px 5px' }}>
+                  last dialed
+                </span>
+              )}
             </a>
           ) : (
             <input
@@ -119,6 +126,32 @@ function LeadContactsSection({ clientId }) {
 
 const LOG_METHODS = ['Phone call', 'WhatsApp', 'Email', 'In person']
 
+// Which of the lead's numbers was dialed (shown when a lead has more than one number)
+function DialedPicker({ numbers, value, onChange }) {
+  if (numbers.length < 2) return null
+  return (
+    <div style={{ marginTop: 10 }}>
+      <label style={{ fontSize: 12, color: 'var(--text2)' }}>Number dialed</label>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+        {numbers.map(n => {
+          const active = samePhone(value, n.phone)
+          return (
+            <button
+              key={n.key}
+              type="button"
+              onClick={() => onChange(n.phone)}
+              className={`log-method-btn ${active ? 'active' : ''}`}
+              title={n.phone}
+            >
+              {n.label} · {formatPhoneDisplay(n.phone)}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function quickDate(daysFromNow) {
   const d = new Date()
   d.setDate(d.getDate() + daysFromNow)
@@ -147,6 +180,33 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
   const [savedFlash, setSavedFlash]           = useState(false)
   const [logSavedFlash, setLogSavedFlash]     = useState(false)
   const [saveWarning, setSaveWarning]         = useState(null)
+  const [altContacts, setAltContacts]         = useState([])
+
+  // Last number actually dialed for this lead (from the call history)
+  const lastDialedLog = useMemo(
+    () => [...contactLogs]
+      .filter(l => l.dialed_phone)
+      .sort((a, b) => String(b.contacted_at).localeCompare(String(a.contacted_at)))[0] || null,
+    [contactLogs]
+  )
+  const dialNumbers = useMemo(() => {
+    const list = []
+    if (form.phone) list.push({ key: 'main', label: 'Main', phone: form.phone })
+    altContacts.forEach(c => {
+      if (c.phone && !list.some(n => samePhone(n.phone, c.phone))) {
+        list.push({ key: c.id, label: c.name || c.designation || 'Alternate', phone: c.phone })
+      }
+    })
+    return list
+  }, [form.phone, altContacts])
+  const [dialedPhone, setDialedPhone] = useState(null)
+  // Default to the number dialed last time (if it's still on file), else the main number
+  const effectiveDialed = dialedPhone
+    || (lastDialedLog && dialNumbers.some(n => samePhone(n.phone, lastDialedLog.dialed_phone)) ? lastDialedLog.dialed_phone : null)
+    || form.phone || null
+  const lastDialedLabel = lastDialedLog
+    ? (dialNumbers.find(n => samePhone(n.phone, lastDialedLog.dialed_phone))?.label || 'removed number')
+    : null
   const firstInputRef = useRef(null)
   const flashTimerRef = useRef(null)
   const logFlashTimerRef = useRef(null)
@@ -222,7 +282,8 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
     // Field save carries postUpdates merged in so there's only ONE clients write.
     const tasks = []
     if (isDirty || hasLog) tasks.push(onSave(mergedForm))
-    if (hasLog) tasks.push(onLogContact(client.id, logMethod, logWhatHappened.trim(), logWhatNext.trim() || null, logProgress))
+    if (hasLog) tasks.push(onLogContact(client.id, logMethod, logWhatHappened.trim(), logWhatNext.trim() || null, logProgress,
+      logMethod === 'Phone call' ? effectiveDialed : null))
 
     try {
       await Promise.all(tasks)
@@ -239,7 +300,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
     }
 
     onClose()
-  }, [form, isDirty, logWhatHappened, logWhatNext, logDue, logTime, logMethod, logProgress, onSave, onPostLogUpdate, onLogContact, onClose, client])
+  }, [form, isDirty, logWhatHappened, logWhatNext, logDue, logTime, logMethod, logProgress, effectiveDialed, onSave, onPostLogUpdate, onLogContact, onClose, client])
 
   useEffect(() => {
     function handleKey(e) {
@@ -296,6 +357,11 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
             </span>
           )}
         </div>
+        {log.dialed_phone && (
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+            📞 {dialNumbers.find(n => samePhone(n.phone, log.dialed_phone))?.label || 'Dialed'} · {formatPhoneDisplay(log.dialed_phone)}
+          </div>
+        )}
         {whatHappened && <div className="history-note">{whatHappened}</div>}
         {whatNext && <div className="history-next-action">→ {whatNext}</div>}
         <div className="history-time">{formatDateTime(log.contacted_at)}</div>
@@ -387,10 +453,21 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                 {form.phone && (
                   <a
                     href={`tel:${form.phone.replace(/\s/g, '')}`}
+                    onClick={() => setDialedPhone(form.phone)}
                     style={{ display: 'block', fontSize: 13, color: 'var(--text2)', marginTop: 4, textDecoration: 'none', letterSpacing: '0.5px' }}
                   >
                     📞 {formatPhoneDisplay(form.phone)}
+                    {lastDialedLog && samePhone(lastDialedLog.dialed_phone, form.phone) && dialNumbers.length > 1 && (
+                      <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#16a34a', background: 'rgba(22,163,74,0.1)', borderRadius: 4, padding: '1px 5px' }}>
+                        last dialed
+                      </span>
+                    )}
                   </a>
+                )}
+                {lastDialedLog && (
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
+                    Last dialed: {lastDialedLabel} · {formatPhoneDisplay(lastDialedLog.dialed_phone)} · {formatDateTime(lastDialedLog.contacted_at)}
+                  </div>
                 )}
               </div>
               <div className="field">
@@ -400,7 +477,12 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
             </div>
 
             {/* Additional contacts — other people at this company you may speak to */}
-            <LeadContactsSection clientId={client.id} />
+            <LeadContactsSection
+              clientId={client.id}
+              onContactsChange={setAltContacts}
+              lastDialedPhone={dialNumbers.length > 1 ? lastDialedLog?.dialed_phone : null}
+              onDial={setDialedPhone}
+            />
 
             <div className="section-label">Business</div>
             <div className="field-row">
@@ -650,6 +732,10 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                       </div>
                     </div>
 
+                    {logMethod === 'Phone call' && (
+                      <DialedPicker numbers={dialNumbers} value={effectiveDialed} onChange={setDialedPhone} />
+                    )}
+
                     <div className="field" style={{ marginTop: 10 }}>
                       <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happened?</label>
                       <textarea
@@ -720,6 +806,10 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                         <span style={{ fontSize: 12.5, fontWeight: 600, color: logProgress ? '#16a34a' : 'var(--text-light)' }}>Progress</span>
                       </div>
                     </div>
+
+                    {logMethod === 'Phone call' && (
+                      <DialedPicker numbers={dialNumbers} value={effectiveDialed} onChange={setDialedPhone} />
+                    )}
                     <div className="field" style={{ marginTop: 8 }}>
                       <label style={{ fontSize: 12, color: 'var(--text2)' }}>What happened?</label>
                       <textarea value={logWhatHappened} onChange={e => setLogWhatHappened(e.target.value)} rows={3} />

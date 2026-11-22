@@ -1,28 +1,45 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { ALL_STAGES, TEMPERATURES } from '../stages'
+import { supabase } from '../supabase'
+import { phoneDigits, formatPhoneDisplay } from '../utils'
 
 export default function SearchBar({ clients, onSelect, onClose }) {
   const [query, setQuery] = useState('')
   const [selectedIdx, setSelectedIdx] = useState(0)
   const inputRef = useRef(null)
+  const [altContacts, setAltContacts] = useState([]) // lead_contacts: alternate numbers per lead
 
   useEffect(() => {
     inputRef.current?.focus()
+    supabase.from('lead_contacts').select('client_id, name, designation, phone')
+      .then(({ data }) => setAltContacts(data || []))
   }, [])
 
   const q = query.toLowerCase().trim()
   // Memoized so we don't re-scan 900+ clients on every render —
   // only recomputes when the search query actually changes.
+  // Phone search ignores spaces and +91/0 prefixes and also looks at alternate numbers
+  const qDigits = q.replace(/\D/g, '').length >= 4 ? phoneDigits(q) : ''
   const results = useMemo(() => {
     if (!q) return []
-    return clients.filter(c =>
-      (c.name || '').toLowerCase().includes(q) ||
-      (c.company || '').toLowerCase().includes(q) ||
-      (c.phone || '').includes(q) ||
-      (c.business_type || '').toLowerCase().includes(q) ||
-      (c.pain_point || '').toLowerCase().includes(q)
-    ).slice(0, 10)
-  }, [q, clients])
+    const altByClient = {}
+    if (qDigits) {
+      for (const a of altContacts) {
+        if (a.phone && phoneDigits(a.phone).includes(qDigits)) altByClient[a.client_id] = a
+      }
+    }
+    return clients
+      .filter(c =>
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.company || '').toLowerCase().includes(q) ||
+        (qDigits && phoneDigits(c.phone).includes(qDigits)) ||
+        altByClient[c.id] ||
+        (c.business_type || '').toLowerCase().includes(q) ||
+        (c.pain_point || '').toLowerCase().includes(q)
+      )
+      .slice(0, 10)
+      .map(c => ({ ...c, _altMatch: qDigits && !phoneDigits(c.phone).includes(qDigits) ? altByClient[c.id] : null }))
+  }, [q, qDigits, clients, altContacts])
 
   function handleKey(e) {
     if (e.key === 'ArrowDown') {
@@ -53,7 +70,7 @@ export default function SearchBar({ clients, onSelect, onClose }) {
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKey}
-            placeholder="Search leads by name, company, phone..."
+            placeholder="Search leads by name, company, phone or alternate number..."
           />
           <kbd className="kbd">esc</kbd>
         </div>
@@ -73,6 +90,11 @@ export default function SearchBar({ clients, onSelect, onClose }) {
                     {temp && <span className="temp-badge-sm">{temp.emoji}</span>}
                     <span className="search-result-name">{c.name}</span>
                     {c.company && <span className="search-result-company">{c.company}</span>}
+                    {c._altMatch && (
+                      <span className="search-result-company" title="Matched an alternate number">
+                        · alt: {c._altMatch.name}{c._altMatch.designation ? ` (${c._altMatch.designation})` : ''} {formatPhoneDisplay(c._altMatch.phone)}
+                      </span>
+                    )}
                   </div>
                   {stage && (
                     <span className="search-result-stage" style={{ color: stage.color }}>

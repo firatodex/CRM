@@ -451,7 +451,7 @@ export default function App() {
     setConfirmDelete(null)
   }
 
-  async function handleLogContact(clientId, method, whatHappened, whatNext, progress = false) {
+  async function handleLogContact(clientId, method, whatHappened, whatNext, progress = false, dialedPhone = null) {
     const now = new Date().toISOString()
     const note = whatHappened + (whatNext ? `\n→ Next: ${whatNext}` : '')
     const rowId = crypto.randomUUID ? crypto.randomUUID() : generateUuidFallback()
@@ -460,23 +460,23 @@ export default function App() {
     // so the UI (History tab, last-contacted time) reflects the log right away.
     const optimisticLog = {
       id: rowId, client_id: clientId, method, note,
-      contacted_at: now, progress,
+      contacted_at: now, progress, dialed_phone: dialedPhone,
     }
     setContactLogs(prev => [optimisticLog, ...prev])
     setClients(prev => prev.map(c => c.id === clientId ? { ...c, last_contacted_at: now } : c))
 
     if (!navigator.onLine) {
-      await queueAction('log_contact', { clientId, method, note, whatHappened, whatNext, now, progress }, rowId)
+      await queueAction('log_contact', { clientId, method, note, whatHappened, whatNext, now, progress, dialedPhone }, rowId)
       return
     }
 
     try {
-      await performLogContact({ clientId, method, note, whatHappened, whatNext, now, progress }, rowId)
+      await performLogContact({ clientId, method, note, whatHappened, whatNext, now, progress, dialedPhone }, rowId)
     } catch (err) {
       if (!navigator.onLine || err?.message?.toLowerCase().includes('fetch')) {
         // Went offline mid-request — the optimistic update already stands,
         // just queue the actual write for later.
-        await queueAction('log_contact', { clientId, method, note, whatHappened, whatNext, now, progress }, rowId)
+        await queueAction('log_contact', { clientId, method, note, whatHappened, whatNext, now, progress, dialedPhone }, rowId)
       } else {
         setError(`Failed to save log: ${err.message}`)
       }
@@ -488,7 +488,7 @@ export default function App() {
   // client-generated UUID used as the primary key, making this safe to
   // call twice with the same rowId (e.g. a retried sync) without creating
   // a duplicate row.
-  async function performLogContact({ clientId, method, note, whatHappened, whatNext, now, progress = false }, rowId) {
+  async function performLogContact({ clientId, method, note, whatHappened, whatNext, now, progress = false, dialedPhone = null }, rowId) {
     const { data: logData, error } = await supabase
       .from('contact_log')
       .insert({
@@ -498,6 +498,7 @@ export default function App() {
         note,
         contacted_at: now,
         progress,
+        dialed_phone: dialedPhone || null,
       })
       .select().single()
 

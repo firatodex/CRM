@@ -5,8 +5,52 @@ import LeadIntelligencePanel, { SmartNoteDumper } from './LeadIntelligencePanel'
 import ClientTab from './ClientTab'
 import { supabase } from '../supabase'
 
-// ── Additional contacts per lead ──────────────────────────────────────────────
-function LeadContactsSection({ clientId, onContactsChange, lastDialedPhone, onDial }) {
+// ── Phone numbers for a lead: the main number plus other contact people ──────
+// Every number gets the same row layout (name · role · number · remove), so the
+// columns line up. The last dialed number gets a green edge and one caption below.
+const NUMBER_GRID = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 118px 16px', alignItems: 'center', columnGap: 10 }
+const cellInput = { width: '100%', minWidth: 0, border: 'none', background: 'transparent', fontFamily: 'var(--font)', padding: 0 }
+
+function NumberRow({ name, role, phone, dialedLast, onDial, onRemove, editable, onEdit }) {
+  return (
+    <div style={{
+      ...NUMBER_GRID, padding: '7px 10px', borderRadius: 6, marginBottom: 4,
+      background: 'var(--bg-light)', border: '1px solid var(--border-light)',
+      borderLeft: `3px solid ${dialedLast ? '#16a34a' : 'var(--border-light)'}`,
+    }}>
+      <div style={{ minWidth: 0, lineHeight: 1.3 }}>
+        {editable ? (
+          <input value={name} onChange={e => onEdit('name', e.target.value)} placeholder="Name"
+            style={{ ...cellInput, display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-dark)' }} />
+        ) : (
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-dark)' }}>{name}</div>
+        )}
+        {editable ? (
+          <input value={role} onChange={e => onEdit('designation', e.target.value)} placeholder="Add role"
+            style={{ ...cellInput, display: 'block', fontSize: 11, color: 'var(--text-muted)' }} />
+        ) : (
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{role}</div>
+        )}
+      </div>
+      {phone ? (
+        <a href={`tel:${phone.replace(/\s/g, '')}`} onClick={e => { e.stopPropagation(); onDial?.(phone) }}
+          title="Tap to call"
+          style={{ fontSize: 13, color: 'var(--primary)', textDecoration: 'none', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', letterSpacing: '0.3px' }}>
+          📞 {formatPhoneDisplay(phone)}
+        </a>
+      ) : editable ? (
+        <input value="" onChange={e => onEdit('phone', e.target.value)} placeholder="Phone"
+          style={{ ...cellInput, fontSize: 13, color: 'var(--text-body)' }} />
+      ) : <span />}
+      {onRemove ? (
+        <button onClick={onRemove} title="Remove"
+          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, padding: 0 }}>×</button>
+      ) : <span />}
+    </div>
+  )
+}
+
+function LeadContactsSection({ clientId, mainPhone, onContactsChange, lastDialed, lastDialedLabel, onDial }) {
   const [contacts, setContacts] = useState([])
   const [adding, setAdding]     = useState(false)
   const [newContact, setNewContact] = useState({ name: '', designation: '', phone: '' })
@@ -42,81 +86,39 @@ function LeadContactsSection({ clientId, onContactsChange, lastDialedPhone, onDi
     setContacts(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c))
   }
 
+  const isLast = phone => !!lastDialed && !!phone && samePhone(lastDialed.dialed_phone, phone)
+  const addInput = { width: '100%', minWidth: 0, fontSize: 12, padding: '5px 7px', border: '1px solid var(--border)', borderRadius: 4, fontFamily: 'var(--font)' }
+
   return (
-    <div style={{ marginBottom: 6 }}>
+    <div style={{ marginBottom: 10, width: '100%' }}>
+      {mainPhone && (
+        <NumberRow name="Main number" role="Primary" phone={mainPhone} dialedLast={isLast(mainPhone)} onDial={onDial} />
+      )}
       {contacts.map(c => (
-        <div key={c.id} style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '5px 8px', borderRadius: 6, marginBottom: 3,
-          background: 'var(--bg-light)', border: '1px solid var(--border-light)',
-        }}>
-          <input
-            value={c.name}
-            onChange={e => updateContact(c.id, 'name', e.target.value)}
-            placeholder="Name"
-            style={{ flex: 2, minWidth: 0, fontSize: 12, fontWeight: 600, border: 'none', background: 'transparent', fontFamily: 'var(--font)', color: 'var(--text-dark)' }}
-          />
-          <input
-            value={c.designation || ''}
-            onChange={e => updateContact(c.id, 'designation', e.target.value)}
-            placeholder="Role"
-            style={{ flex: 1, minWidth: 0, fontSize: 11, border: 'none', background: 'transparent', fontFamily: 'var(--font)', color: 'var(--text-muted)' }}
-          />
-          {c.phone ? (
-            <a
-              href={`tel:${c.phone.replace(/\s/g, '')}`}
-              onClick={e => { e.stopPropagation(); onDial?.(c.phone) }}
-              style={{ flex: 3, minWidth: 0, whiteSpace: 'nowrap', fontSize: 12, color: 'var(--primary)', textDecoration: 'none', letterSpacing: '0.3px', fontFamily: 'var(--font)' }}
-              title="Tap to call"
-            >
-              📞 {formatPhoneDisplay(c.phone)}
-              {lastDialedPhone && samePhone(lastDialedPhone, c.phone) && (
-                <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#16a34a', background: 'rgba(22,163,74,0.1)', borderRadius: 4, padding: '1px 5px' }}>
-                  last dialed
-                </span>
-              )}
-            </a>
-          ) : (
-            <input
-              value={c.phone || ''}
-              onChange={e => updateContact(c.id, 'phone', e.target.value)}
-              placeholder="Phone"
-              style={{ flex: 2, fontSize: 12, border: 'none', background: 'transparent', fontFamily: 'var(--font)', color: 'var(--text-body)' }}
-            />
-          )}
-          <button onClick={() => deleteContact(c.id)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, padding: '0 2px', flexShrink: 0 }} title="Remove">×</button>
-        </div>
+        <NumberRow key={c.id} editable name={c.name} role={c.designation || ''} phone={c.phone}
+          dialedLast={isLast(c.phone)} onDial={onDial}
+          onEdit={(field, value) => updateContact(c.id, field, value)}
+          onRemove={() => deleteContact(c.id)} />
       ))}
+      {lastDialed && (
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 6px 2px' }}>
+          <span style={{ color: '#16a34a', fontWeight: 700 }}>▍</span>Last dialed: {lastDialedLabel} · {formatDateTime(lastDialed.contacted_at)}
+        </div>
+      )}
       {adding ? (
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 4 }}>
-          <input
-            autoFocus
-            value={newContact.name}
-            onChange={e => setNewContact(p => ({ ...p, name: e.target.value }))}
-            placeholder="Name *"
-            style={{ flex: 2, fontSize: 12, padding: '4px 6px', border: '1px solid var(--border)', borderRadius: 4, fontFamily: 'var(--font)' }}
-          />
-          <input
-            value={newContact.designation}
-            onChange={e => setNewContact(p => ({ ...p, designation: e.target.value }))}
-            placeholder="Role"
-            style={{ flex: 1, fontSize: 12, padding: '4px 6px', border: '1px solid var(--border)', borderRadius: 4, fontFamily: 'var(--font)' }}
-          />
-          <input
-            value={newContact.phone}
-            onChange={e => setNewContact(p => ({ ...p, phone: e.target.value }))}
-            placeholder="Phone"
-            style={{ flex: 2, fontSize: 12, padding: '4px 6px', border: '1px solid var(--border)', borderRadius: 4, fontFamily: 'var(--font)' }}
-            onKeyDown={e => { if (e.key === 'Enter') addContact(); if (e.key === 'Escape') setAdding(false) }}
-          />
-          <button className="btn btn-primary btn-sm" onClick={addContact} style={{ flexShrink: 0 }}>Add</button>
-          <button onClick={() => setAdding(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>×</button>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.2fr) auto', columnGap: 6, alignItems: 'center', paddingBottom: 4 }}>
+          <input autoFocus value={newContact.name} onChange={e => setNewContact(p => ({ ...p, name: e.target.value }))} placeholder="Name *" style={addInput} />
+          <input value={newContact.designation} onChange={e => setNewContact(p => ({ ...p, designation: e.target.value }))} placeholder="Role" style={addInput} />
+          <input value={newContact.phone} onChange={e => setNewContact(p => ({ ...p, phone: e.target.value }))} placeholder="Phone" style={addInput}
+            onKeyDown={e => { if (e.key === 'Enter') addContact(); if (e.key === 'Escape') setAdding(false) }} />
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button className="btn btn-primary btn-sm" onClick={addContact}>Add</button>
+            <button onClick={() => setAdding(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14 }}>×</button>
+          </div>
         </div>
       ) : (
-        <button
-          onClick={() => setAdding(true)}
-          style={{ fontSize: 11, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}
-        >
+        <button onClick={() => setAdding(true)}
+          style={{ fontSize: 12, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}>
           + Add contact person
         </button>
       )}
@@ -132,18 +134,19 @@ function DialedPicker({ numbers, value, onChange }) {
   return (
     <div style={{ marginTop: 10 }}>
       <label style={{ fontSize: 12, color: 'var(--text2)' }}>Number dialed</label>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(numbers.length, 3)}, minmax(0, 1fr))`, gap: 8, marginTop: 6 }}>
         {numbers.map(n => {
           const active = samePhone(value, n.phone)
           return (
-            <button
-              key={n.key}
-              type="button"
-              onClick={() => onChange(n.phone)}
-              className={`log-method-btn ${active ? 'active' : ''}`}
-              title={n.phone}
-            >
-              {n.label} · {formatPhoneDisplay(n.phone)}
+            <button key={n.key} type="button" onClick={() => onChange(n.phone)} title={`${n.label} · ${n.phone}`}
+              style={{
+                textAlign: 'left', padding: '7px 10px', borderRadius: 8, cursor: 'pointer', minWidth: 0,
+                border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                background: active ? 'var(--accent)' : 'transparent',
+                color: active ? '#fff' : 'var(--text2)', fontFamily: 'var(--font)', transition: 'all 0.15s',
+              }}>
+              <div style={{ fontSize: 11, opacity: 0.85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.label}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{formatPhoneDisplay(n.phone)}</div>
             </button>
           )
         })}
@@ -191,7 +194,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
   )
   const dialNumbers = useMemo(() => {
     const list = []
-    if (form.phone) list.push({ key: 'main', label: 'Main', phone: form.phone })
+    if (form.phone) list.push({ key: 'main', label: 'Main number', phone: form.phone })
     altContacts.forEach(c => {
       if (c.phone && !list.some(n => samePhone(n.phone, c.phone))) {
         list.push({ key: c.id, label: c.name || c.designation || 'Alternate', phone: c.phone })
@@ -450,25 +453,6 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
               <div className="field">
                 <label>Phone</label>
                 <input value={form.phone || ''} onChange={e => set('phone', e.target.value)} placeholder="Mobile number" />
-                {form.phone && (
-                  <a
-                    href={`tel:${form.phone.replace(/\s/g, '')}`}
-                    onClick={() => setDialedPhone(form.phone)}
-                    style={{ display: 'block', fontSize: 13, color: 'var(--text2)', marginTop: 4, textDecoration: 'none', letterSpacing: '0.5px' }}
-                  >
-                    📞 {formatPhoneDisplay(form.phone)}
-                    {lastDialedLog && samePhone(lastDialedLog.dialed_phone, form.phone) && dialNumbers.length > 1 && (
-                      <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#16a34a', background: 'rgba(22,163,74,0.1)', borderRadius: 4, padding: '1px 5px' }}>
-                        last dialed
-                      </span>
-                    )}
-                  </a>
-                )}
-                {lastDialedLog && (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
-                    Last dialed: {lastDialedLabel} · {formatPhoneDisplay(lastDialedLog.dialed_phone)} · {formatDateTime(lastDialedLog.contacted_at)}
-                  </div>
-                )}
               </div>
               <div className="field">
                 <label>Email</label>
@@ -479,8 +463,10 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
             {/* Additional contacts — other people at this company you may speak to */}
             <LeadContactsSection
               clientId={client.id}
+              mainPhone={form.phone}
               onContactsChange={setAltContacts}
-              lastDialedPhone={dialNumbers.length > 1 ? lastDialedLog?.dialed_phone : null}
+              lastDialed={dialNumbers.length > 1 ? lastDialedLog : null}
+              lastDialedLabel={lastDialedLabel}
               onDial={setDialedPhone}
             />
 

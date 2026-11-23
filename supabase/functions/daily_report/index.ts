@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { loadPhonebook, phoneLines } from "./phonebook.ts";
+import { telegramToken } from "./tg.ts";
 
 serve(async () => {
   const supabase = createClient(
@@ -8,7 +9,7 @@ serve(async () => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  const TELEGRAM_TOKEN = Deno.env.get("TELEGRAM_TOKEN") ?? "<set in deployed function>";
+  const TELEGRAM_TOKEN = await telegramToken(supabase);
   const CHAT_ID = "933636460";
 
   const now = new Date();

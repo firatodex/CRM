@@ -1,10 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { digits, loadPhonebook, phoneLines } from "./phonebook.ts";
+import { telegramToken } from "./tg.ts";
 
-const TELEGRAM_TOKEN = Deno.env.get("TELEGRAM_TOKEN") ?? "<set in deployed function>";
 const CHAT_ID = "933636460";
-const BOT_URL = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
+let BOT_URL = ""; // set per request from the vault token
 
 async function send(text: string) {
   await fetch(`${BOT_URL}/sendMessage`, {
@@ -36,6 +36,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+    BOT_URL = `https://api.telegram.org/bot${await telegramToken(supabase)}`;
 
     const lower = text.toLowerCase();
     const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000);

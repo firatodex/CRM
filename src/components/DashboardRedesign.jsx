@@ -77,6 +77,10 @@ function MetricCard({ label, value, comparison, color = 'var(--text-dark)', tren
   )
 }
 
+// GST registration (GSTIN 24CNIPD2882E1Z7) was approved on 8 Aug 2026; no GST was owed before that
+const GST_REGISTERED_FROM = '2026-08'
+const GST_QUARTERLY_MONTHS = new Set(['2026-10', '2026-11', '2026-12'])
+
 function BusinessScoreboard({ clients, deals, payments, gstPaid = [] }) {
   // Month keys 'YYYY-MM' in local (IST) time; stored timestamps are compared by their date part
   const thisMonth = todayStr().slice(0, 7)
@@ -105,15 +109,19 @@ function BusinessScoreboard({ clients, deals, payments, gstPaid = [] }) {
   const cashGross = sum(cashRows, 'amount')
   const cashGst = cashRows.reduce((s, p) => s + gstOf(p), 0)
   const gstLastMonth = paidIn(lastMonth).reduce((s, p) => s + gstOf(p), 0)
-  // GST for a month is filed and paid by the 20th of the following month
-  const gstDueFor = month => {
+  // When GST for a month must be paid. Monthly filer: 20th of the next month.
+  // Oct–Dec 2026 is under the quarterly scheme (QRMP): Oct and Nov are paid by the
+  // 25th of the next month, and December with the quarterly return by 22 Jan.
+  const gstDueDate = month => {
     const [y, m] = month.split('-').map(Number)
-    return new Date(y, m, 20).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+    if (GST_QUARTERLY_MONTHS.has(month)) return m % 3 === 0 ? new Date(y, m, 22) : new Date(y, m, 25)
+    return new Date(y, m, 20)
   }
-  const gstDue = gstDueFor(lastMonth)
+  const fmtDue = d => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+  const gstDue = fmtDue(gstDueDate(lastMonth))
   const lastMonthPaid = gstPaid.find(g => g.period === lastMonth)
   const lastMonthGstOpen = !lastMonthPaid && gstLastMonth >= 1
-  const gstOverdue = lastMonthGstOpen && Number(todayStr().slice(8, 10)) > 20
+  const gstOverdue = lastMonthGstOpen && todayStr() > gstDueDate(lastMonth).toLocaleDateString('en-CA')
 
   // GST paid to the government: latest payment, total, and earlier months with GST not yet marked paid
   const latestGstPaid = gstPaid.reduce((a, g) => (!a || g.period > a.period ? g : a), null)
@@ -122,7 +130,7 @@ function BusinessScoreboard({ clients, deals, payments, gstPaid = [] }) {
   const unpaidMonths = [...new Set(payments
     .filter(p => p.paid && gstOf(p) >= 1)
     .map(p => monthOf(p.paid_at)))]
-    .filter(m => m && m < lastMonth && !paidPeriods.has(m))
+    .filter(m => m && m >= GST_REGISTERED_FROM && m < lastMonth && !paidPeriods.has(m))
     .sort()
 
   const pendingPayments = payments.filter(p => !p.paid && Number(p.amount) > 0)
@@ -197,8 +205,8 @@ function BusinessScoreboard({ clients, deals, payments, gstPaid = [] }) {
             label={`GST to pay · ${monthName(thisMonth)}`}
             value={formatCurrency(cashGst)}
             comparison={lastMonthPaid
-              ? `collected so far, due ${gstDueFor(thisMonth)} · ${monthName(lastMonth)} paid ✓`
-              : `collected so far · keep aside, due ${gstDueFor(thisMonth)}`}
+              ? `collected so far, due ${fmtDue(gstDueDate(thisMonth))} · ${monthName(lastMonth)} paid ✓`
+              : `collected so far · keep aside, due ${fmtDue(gstDueDate(thisMonth))}`}
             color="var(--warning)"
             borderColor="var(--warning)"
           />

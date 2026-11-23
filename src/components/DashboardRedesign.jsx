@@ -395,32 +395,16 @@ function PipelineReserveGraph({ clients, pipelineSnapshots }) {
   const WIN_DEDUCTION = 24
 
   const pipelinePointsData = useMemo(() => {
-    // Build map of won_at dates
+    // Deals won per day, straight from the clients' won dates (the one source of truth)
     const wonByDate = {}
     clients.forEach(c => {
-      if (c.won_at && c.stage === 'active') {
-        const d = c.won_at.slice(0, 10)
-        if (d !== today) wonByDate[d] = (wonByDate[d] || 0) + 1
-      }
+      if (!c.won_at) return
+      const d = c.won_at.slice(0, 10)
+      ;(wonByDate[d] = wonByDate[d] || []).push(c.name)
     })
 
-    // Historical snapshots
-    const frozen = pipelineSnapshots
-      .filter(s => s.snapshot_date !== today)
-      .sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date))
-      .map(s => {
-        const snapshotWins = s.wins_today || 0
-        const clientWins = wonByDate[s.snapshot_date] || 0
-        const wins = Math.max(snapshotWins, clientWins)
-        return {
-          date: s.snapshot_date,
-          label: new Date(s.snapshot_date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-          reserve: s.points,
-          proposals: s.proposal_count,
-          wins: wins > 0 ? wins : null,
-          pointsRemoved: s.win_points_removed > 0 ? s.win_points_removed : null,
-        }
-      })
+    const snaps = {}
+    pipelineSnapshots.forEach(s => { if (s.snapshot_date !== today) snaps[s.snapshot_date] = s })
 
     // Today: live calculation
     const liveContactedCount = clients.filter(c => c.stage === 'contacted').length
@@ -431,19 +415,34 @@ function PipelineReserveGraph({ clients, pipelineSnapshots }) {
       const daysSinceSent = (Date.now() - new Date(sentAt).getTime()) / (1000 * 60 * 60 * 24)
       return daysSinceSent <= PROPOSAL_EXPIRY_DAYS
     }).length
-    const wonTodayList = clients.filter(c => c.won_at && c.won_at.slice(0, 10) === today)
-    const wonTodayPoints = wonTodayList.length * WIN_DEDUCTION
+    const wonTodayPoints = (wonByDate[today] || []).length * WIN_DEDUCTION
 
-    const todayPoint = {
-      date: today,
-      label: new Date(today + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-      reserve: Math.max(0, liveContactedCount * 1 + liveProposalCount * 7 - wonTodayPoints),
-      proposals: liveProposalCount,
-      wins: wonTodayList.length > 0 ? wonTodayList.length : null,
-      pointsRemoved: wonTodayPoints > 0 ? wonTodayPoints : null,
+    // One point per calendar day, so dots sit on their real dates. Days without a
+    // snapshot carry the previous day's reserve forward.
+    const dates = Object.keys(snaps).sort()
+    if (!dates.length) dates.push(today)
+    const out = []
+    let last = null
+    for (let d = new Date(dates[0] + 'T00:00:00'); ; d.setDate(d.getDate() + 1)) {
+      const key = d.toLocaleDateString('en-CA')
+      if (key > today) break
+      const snap = snaps[key]
+      if (snap) last = { reserve: snap.points, proposals: snap.proposal_count }
+      const isToday = key === today
+      const point = isToday
+        ? { reserve: Math.max(0, liveContactedCount + liveProposalCount * 7 - wonTodayPoints), proposals: liveProposalCount }
+        : last || { reserve: null, proposals: null }
+      const names = wonByDate[key] || []
+      out.push({
+        date: key,
+        label: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+        ...point,
+        wins: names.length ? names.length : null,
+        winDot: names.length ? 0 : null,
+        winNames: names,
+      })
     }
-
-    return [...frozen, todayPoint]
+    return out
   }, [pipelineSnapshots, clients, today])
 
   const currentPoints = pipelinePointsData.length > 0
@@ -477,17 +476,17 @@ function PipelineReserveGraph({ clients, pipelineSnapshots }) {
               <XAxis 
                 dataKey="label" 
                 tick={{ fontSize: 10, fill: 'var(--text-muted)' }} 
-                interval={Math.max(0, Math.floor(pipelinePointsData.length / 8) - 1)}
+                interval={Math.max(0, Math.ceil(pipelinePointsData.length / 8) - 1)}
               />
               <YAxis yAxisId="reserve" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} allowDecimals={false} />
               <YAxis yAxisId="proposals" orientation="right" tick={{ fontSize: 10, fill: '#5E8FC0' }} allowDecimals={false} />
               <Tooltip
                 contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--border-light)' }}
-                formatter={(v, name) => {
+                formatter={(v, name, item) => {
+                  if (name === 'wins') { const n = item?.payload?.wins || 0; return [item?.payload?.winNames?.join(', '), n > 1 ? `${n} deals won` : 'Deal won'] }
                   if (name === 'reserve') return [v, 'Reserve points']
                   if (name === 'proposals') return [v, 'Active proposals']
-                  if (name === 'wins') return [v, 'Deal won']
-                  if (name === 'pointsRemoved') return [`-${v}`, 'Points removed by win']
+                  if (name === 'wins') return [v, v > 1 ? 'Deals won' : 'Deal won']
                   return [v, name]
                 }}
               />
@@ -495,7 +494,7 @@ function PipelineReserveGraph({ clients, pipelineSnapshots }) {
               <Line isAnimationActive={false} yAxisId="proposals" type="monotone" dataKey="proposals" stroke="#5E8FC0" strokeWidth={1.5} dot={false} strokeDasharray="4 2" name="proposals" />
               <Scatter
                 yAxisId="reserve"
-                dataKey="wins"
+                dataKey="winDot"
                 fill="#34C759"
                 name="wins"
                 shape={(props) => {
@@ -504,17 +503,9 @@ function PipelineReserveGraph({ clients, pipelineSnapshots }) {
                   return (
                     <g>
                       <circle cx={cx} cy={cy} r={5} fill="#34C759" />
-                      {payload.pointsRemoved && (
-                        <text 
-                          x={cx} 
-                          y={cy - 14} 
-                          textAnchor="middle" 
-                          fontSize={10} 
-                          fontWeight={700} 
-                          fill="#34C759"
-                          pointerEvents="none"
-                        >
-                          -{payload.pointsRemoved}
+                      {payload.wins > 1 && (
+                        <text x={cx} y={cy - 9} textAnchor="middle" fontSize={10} fontWeight={700} fill="#34C759" pointerEvents="none">
+                          {payload.wins}
                         </text>
                       )}
                     </g>

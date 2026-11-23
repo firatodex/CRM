@@ -8,8 +8,36 @@ import { supabase } from '../supabase'
 // ── Phone numbers for a lead: the main number plus other contact people ──────
 // Every number gets the same row layout (name · role · number · remove), so the
 // columns line up. The last dialed number gets a green edge and one caption below.
-const NUMBER_GRID = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 118px 16px', alignItems: 'center', columnGap: 10 }
+const NUMBER_GRID = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 118px 22px 16px', alignItems: 'center', columnGap: 10 }
 const cellInput = { width: '100%', minWidth: 0, border: 'none', background: 'transparent', fontFamily: 'var(--font)', padding: 0 }
+
+// Copies the bare 10-digit number (no spaces / +91) so it pastes cleanly anywhere.
+function CopyNumber({ phone }) {
+  const [copied, setCopied] = useState(false)
+  if (!phone) return <span />
+  const copy = async (e) => {
+    e.stopPropagation()
+    let d = phone.replace(/\D/g, '')
+    if (d.length === 12 && d.startsWith('91')) d = d.slice(2)
+    else if (d.length === 11 && d.startsWith('0')) d = d.slice(1)
+    try { await navigator.clipboard.writeText(d) } catch {
+      const t = document.createElement('textarea'); t.value = d; document.body.appendChild(t); t.select()
+      document.execCommand('copy'); t.remove()
+    }
+    setCopied(true); setTimeout(() => setCopied(false), 1200)
+  }
+  return (
+    <button type="button" onClick={copy} title={copied ? 'Copied' : 'Copy number'} aria-label="Copy number"
+      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: copied ? '#16a34a' : 'var(--text-muted)' }}>
+      {copied ? (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+      ) : (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+      )}
+    </button>
+  )
+}
 
 function NumberRow({ name, role, phone, dialedLast, onDial, onRemove, editable, onEdit }) {
   return (
@@ -42,6 +70,7 @@ function NumberRow({ name, role, phone, dialedLast, onDial, onRemove, editable, 
         <input value="" onChange={e => onEdit('phone', e.target.value)} placeholder="Phone"
           style={{ ...cellInput, fontSize: 13, color: 'var(--text-body)' }} />
       ) : <span />}
+      <CopyNumber phone={phone} />
       {onRemove ? (
         <button onClick={onRemove} title="Remove"
           style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, padding: 0 }}>×</button>

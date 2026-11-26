@@ -4,6 +4,7 @@ import { waLink, formatDateTime, todayStr, formatPhoneDisplay, samePhone } from 
 import LeadIntelligencePanel, { SmartNoteDumper } from './LeadIntelligencePanel'
 import ClientTab from './ClientTab'
 import { supabase } from '../supabase'
+import { loadTerritory, GUJARAT_DISTRICTS } from '../territoryData'
 
 // ── Phone numbers for a lead: the main number plus other contact people ──────
 // Every number gets the same row layout (name · role · number · remove), so the
@@ -155,6 +156,39 @@ function LeadContactsSection({ clientId, mainPhone, onContactsChange, lastDialed
   )
 }
 
+// District for the Territory map: blank = taken from PM Surya Ghar portal data.
+function DistrictField({ client, value, onChange }) {
+  const [territory, setTerritory] = useState(null)
+  useEffect(() => { loadTerritory().then(setTerritory).catch(() => {}) }, [])
+  const auto = territory?.districtOf?.[client.id]?.how === 'portal' ? territory.districtOf[client.id].district : null
+  const district = value || auto
+  return (
+    <div className="field-row">
+      <div className="field">
+        <label>District</label>
+        <select value={value} onChange={e => onChange(e.target.value)}>
+          <option value="">{auto ? `${auto} (from portal)` : 'Not set'}</option>
+          {GUJARAT_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+      </div>
+      <div className="field" style={{ justifyContent: 'flex-end' }}>
+        {district && territory && (
+          <div style={{ fontSize: 12, color: 'var(--text-light)', paddingBottom: 8 }}>
+            {(() => {
+              const n = Object.entries(territory.districtOf)
+                .filter(([id, d]) => id !== client.id && d.district === district && d.stage === 'active').length
+              return n > 0
+                ? <span><b style={{ color: '#16A34A' }}>{n} active client{n > 1 ? 's' : ''}</b> in {district} · </span>
+                : <span>No active clients in {district} yet · </span>
+            })()}
+            {Number(territory.market[district]?.vendors || 0).toLocaleString('en-IN')} EPCs
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const LOG_METHODS = ['Phone call', 'WhatsApp', 'Email', 'In person']
 
 // Which of the lead's numbers was dialed (shown when a lead has more than one number)
@@ -268,7 +302,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
   const EDITABLE_FIELDS = [
     'name','stage','phone','email','company','business_type',
     'next_action','next_action_due','next_action_time','notes','temperature',
-    'potential_revenue','proposal_value','source','website','pain_point',
+    'potential_revenue','proposal_value','source','website','pain_point','district',
     'current_solution','objection',
     'discovery_team_size','discovery_monthly_leads','discovery_current_tool',
     'discovery_lost_deals','discovery_decision_maker','discovery_switch_openness',
@@ -521,6 +555,8 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                 <input value={form.website || ''} onChange={e => set('website', e.target.value)} placeholder="https://..." />
               </div>
             </div>
+
+            <DistrictField client={client} value={form.district || ''} onChange={v => set('district', v)} />
 
             <div className="section-label">Strategy</div>
             {form.stage === 'proposal' && (

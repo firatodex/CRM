@@ -5,6 +5,7 @@ import KanbanColumn from './components/KanbanColumn'
 import AddClientModal from './components/AddClientModal'
 import DetailModal from './components/DetailModal'
 import DashboardRedesign from './components/DashboardRedesign'
+import TerritoryView from './components/TerritoryView'
 import TodayView from './components/TodayView'
 import SearchBar from './components/SearchBar'
 import ActiveDeadPanel from './components/ActiveDeadPanel'
@@ -391,7 +392,7 @@ export default function App() {
       next_action_time: form.next_action_time || null,
       notes: form.notes?.trim() || null, temperature: form.temperature || null,
       potential_revenue: form.potential_revenue || null, source: form.source || null,
-      website: form.website?.trim() || null, pain_point: form.pain_point?.trim() || null,
+      website: form.website?.trim() || null, district: form.district || null, pain_point: form.pain_point?.trim() || null,
       proposal_value: form.proposal_value || null,
       current_solution: form.current_solution?.trim() || null,
       objection: form.objection?.trim() || null,
@@ -642,6 +643,9 @@ export default function App() {
           <button className={`nav-btn ${view === 'payments' ? 'active' : ''}`} onClick={() => setView('payments')}>
             Payments
           </button>
+          <button className={`nav-btn ${view === 'territory' ? 'active' : ''}`} onClick={() => setView('territory')}>
+            Territory
+          </button>
           <button className={`nav-btn ${view === 'team' ? 'active' : ''}`} onClick={() => setView('team')}>Team</button>
           {SHOW_DELIVERY_HEALTH_DESK_NAV && (
             <>
@@ -770,6 +774,8 @@ export default function App() {
               <ActiveDeadPanel clients={deadClients} type="dead" onCardClick={setSelected} />
             )}
           </div>
+        ) : view === 'territory' ? (
+          <TerritoryView clients={clients} onOpenClient={setSelected} />
         ) : view === 'payments' ? (
           <PaymentsPage
             clients={clients}

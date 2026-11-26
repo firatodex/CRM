@@ -189,6 +189,85 @@ function DistrictField({ client, value, onChange }) {
   )
 }
 
+// Nearest active clients (km) — names to drop on a call.
+function NearbyClients({ client }) {
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState(null)
+  const [appOnly, setAppOnly] = useState(false)
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    let alive = true
+    setRows(null); setError(null)
+    supabase.rpc('nearby_clients', { p_client: client.id, p_limit: 8 }).then(({ data, error }) => {
+      if (!alive) return
+      if (error) setError(error.message); else setRows(data || [])
+    })
+    return () => { alive = false }
+  }, [client.id])
+
+  const isApp = r => /crm|opscraft|software|inventory|lms/i.test(r.products || '')
+  const list = (rows || []).filter(r => !appOnly || isApp(r)).slice(0, 6)
+  const title = c => (c.company || c.name || '').toLowerCase().replace(/\b\w/g, m => m.toUpperCase())
+  const km = r => `${r.accuracy === 'town' ? '' : '~'}${r.km} km`
+  const pitch = list.slice(0, 3).map(r => `${title(r)} (${r.place})`).join(', ')
+  const copyPitch = async () => {
+    const text = `EPCs near you like ${pitch} already work with us.`
+    try { await navigator.clipboard.writeText(text) } catch { /* ignore */ }
+    setCopied(true); setTimeout(() => setCopied(false), 1200)
+  }
+
+  if (error) return <div style={{ fontSize: 12, color: 'var(--error)' }}>Couldn’t load nearby clients: {error}</div>
+  if (!rows) return <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Finding nearest clients…</div>
+  if (rows.length === 0) return (
+    <div style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+      This lead has no location yet. Set its <b>District</b> on the left and save, then reopen.
+    </div>
+  )
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto', paddingRight: 2 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 11.5, color: 'var(--text-light)' }}>Nearest Dyzen clients</span>
+        <label style={{ fontSize: 11.5, color: 'var(--text-light)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+          <input type="checkbox" checked={appOnly} onChange={e => setAppOnly(e.target.checked)} style={{ accentColor: 'var(--primary)' }} />
+          App users only
+        </label>
+      </div>
+
+      {list.length > 0 && (
+        <div style={{ padding: '10px 12px', background: 'var(--primary-light)', borderRadius: 8, borderLeft: '3px solid var(--primary)' }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--primary)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Say on the call</div>
+          <div style={{ fontSize: 13, color: 'var(--text-dark)', marginTop: 4, lineHeight: 1.45 }}>“EPCs near you like {pitch} already work with us.”</div>
+          <button onClick={copyPitch} style={{ marginTop: 6, background: 'none', border: 'none', padding: 0, fontSize: 12, color: copied ? '#16A34A' : 'var(--primary)', cursor: 'pointer', fontWeight: 600 }}>
+            {copied ? '✓ Copied' : 'Copy line'}
+          </button>
+        </div>
+      )}
+      {list.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No app users found nearby. Untick the filter to see all clients.</div>}
+
+      {list.map((r, i) => (
+        <div key={r.id} style={{ display: 'grid', gridTemplateColumns: '22px minmax(0,1fr) auto', gap: 8, alignItems: 'center',
+          background: 'var(--bg-white)', border: '1px solid var(--border-light)', borderLeft: `3px solid ${i === 0 ? '#16A34A' : 'var(--border-light)'}`,
+          borderRadius: 8, padding: '7px 10px' }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textAlign: 'center' }}>{i + 1}</span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 650, color: 'var(--text-dark)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title(r)}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--text-light)', marginTop: 2, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span>{r.place}{r.won_at && <> · since {new Date(r.won_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</>}</span>
+              {isApp(r)
+                ? <span style={{ fontSize: 10.5, fontWeight: 700, color: '#16A34A', background: '#E8F9EE', borderRadius: 4, padding: '0 5px' }}>✓ App user</span>
+                : <span style={{ fontSize: 10.5, color: 'var(--text-muted)', background: 'var(--bg-light)', borderRadius: 4, padding: '0 5px' }}>{r.products || 'Product not recorded'}</span>}
+            </div>
+          </div>
+          <span style={{ fontSize: 15, fontWeight: 700, color: i === 0 ? '#16A34A' : 'var(--text-body)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{km(r)}</span>
+        </div>
+      ))}
+
+      <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>Straight-line distance from town in the PM Surya Ghar address. “~” = district-level estimate.</div>
+    </div>
+  )
+}
+
 const LOG_METHODS = ['Phone call', 'WhatsApp', 'Email', 'In person']
 
 // Which of the lead's numbers was dialed (shown when a lead has more than one number)
@@ -227,7 +306,7 @@ function quickDate(daysFromNow) {
   return `${y}-${m}-${day}`
 }
 
-const RIGHT_TABS = ['Log', 'History', 'Discovery']
+const RIGHT_TABS = ['Log', 'History', 'Nearby']
 
 function getLastMethod() {
   try { return localStorage.getItem('lastLogMethod') || 'Phone call' } catch { return 'Phone call' }
@@ -621,20 +700,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
 
             {/* Tab bar */}
             {(() => {
-              const tabs = ['Log', 'History', 'Discovery', ...(client.stage === 'active' ? ['Client'] : [])]
-              
-              // Calculate discovery completion status
-              const discoveryFields = [
-                form.discovery_team_size,
-                form.discovery_monthly_leads,
-                form.discovery_current_tool,
-                form.discovery_lost_deals,
-                form.discovery_decision_maker,
-                form.discovery_switch_openness,
-              ]
-              const filledCount = discoveryFields.filter(f => f).length
-              const isFullyFilled = filledCount === 6
-              const isPartiallyFilled = filledCount > 0 && filledCount < 6
+              const tabs = ['Log', 'History', 'Nearby', ...(client.stage === 'active' ? ['Client'] : [])]
               
               return (
                 <div style={{ display: 'flex', gap: 2, marginBottom: 12, background: 'var(--bg-light)', borderRadius: 8, padding: 3, flexShrink: 0 }}>
@@ -651,16 +717,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
                         transition: 'all 0.15s',
                       }}
                     >
-                      {tab === 'Discovery' ? (
-                        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                          📋 Discovery
-                          {isFullyFilled ? (
-                            <span style={{ color: '#16a34a', fontWeight: 700, fontSize: 13 }}>✓</span>
-                          ) : isPartiallyFilled ? (
-                            <span style={{ color: '#3b82f6', fontWeight: 700, fontSize: 13 }}>◐</span>
-                          ) : null}
-                        </span>
-                      ) : tab}
+                      {tab === 'Nearby' ? '📍 Nearby' : tab}
                       {tab === 'History' && contactLogs.length > 0 && (
                         <span style={{
                           marginLeft: 4, fontSize: 10, background: 'var(--border-light)',
@@ -912,69 +969,8 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
               </div>
             )}
 
-            {/* Tab: Discovery */}
-            {rightTab === 'Discovery' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto', paddingRight: 2 }}>
-                {form.discovery_completed_at ? (
-                  <div style={{ fontSize: 11, color: 'var(--success)', fontWeight: 600, background: '#f0fdf4', borderRadius: 6, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 4, alignSelf: 'flex-start' }}>
-                    ✓ Discovery completed {new Date(form.discovery_completed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>Fill this during or right after the first call</div>
-                )}
-
-                {[
-                  { key: 'discovery_team_size', label: 'Sales Team Size', opts: [['just_me','Just me'],['2_5','2–5'],['5_10','5–10'],['10_plus','10+']] },
-                  { key: 'discovery_monthly_leads', label: 'Monthly Leads Volume', opts: [['lt_50','< 50'],['50_200','51–200'],['200_500','200–500'],['500_plus','500+']] },
-                  { key: 'discovery_current_tool', label: 'Current Tool', opts: [['nothing','Nothing'],['whatsapp','WhatsApp'],['excel','Excel'],['other_crm','Other CRM'],['mix','Mix']] },
-                ].map(({ key, label, opts }) => (
-                  <div key={key}>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</label>
-                    <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                      {opts.map(([val, lbl]) => (
-                        <button key={val} onClick={() => setForm(f => ({ ...f, [key]: val }))}
-                          style={{ flex: '1 1 auto', padding: '7px 6px', borderRadius: 7, border: '1.5px solid', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
-                            borderColor: form[key] === val ? 'var(--primary)' : 'var(--border)',
-                            background: form[key] === val ? 'var(--primary)' : 'var(--bg-white)',
-                            color: form[key] === val ? '#fff' : 'var(--text-light)' }}>
-                          {lbl}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-
-                {[
-                  { key: 'discovery_lost_deals', label: 'Lost Deal Due to Missed Follow-up?', opts: [['yes','Yes'],['no','No'],['not_sure','Not sure']] },
-                  { key: 'discovery_decision_maker', label: 'Are They the Decision Maker?', opts: [['yes','Yes'],['no','No'],['partially','Partially']] },
-                  { key: 'discovery_switch_openness', label: 'Open to Switching?', opts: [['hot','🔥 Hot'],['warm','🌤 Warm'],['cold','❄️ Cold']] },
-                ].map(({ key, label, opts }) => (
-                  <div key={key}>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</label>
-                    <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                      {opts.map(([val, lbl]) => (
-                        <button key={val} onClick={() => setForm(f => ({ ...f, [key]: val }))}
-                          style={{ flex: 1, padding: '7px 0', borderRadius: 7, border: '1.5px solid', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
-                            borderColor: form[key] === val ? 'var(--primary)' : 'var(--border)',
-                            background: form[key] === val ? 'var(--primary)' : 'var(--bg-white)',
-                            color: form[key] === val ? '#fff' : 'var(--text-light)' }}>
-                          {lbl}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-
-                <button
-                  onClick={() => setForm(f => ({ ...f, discovery_completed_at: f.discovery_completed_at ? null : new Date().toISOString() }))}
-                  style={{ marginTop: 4, padding: '9px 0', borderRadius: 8, border: '1.5px solid', fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s',
-                    borderColor: form.discovery_completed_at ? 'var(--border)' : 'var(--primary)',
-                    background: form.discovery_completed_at ? 'var(--bg-light)' : 'var(--primary)',
-                    color: form.discovery_completed_at ? 'var(--text-muted)' : '#fff' }}>
-                  {form.discovery_completed_at ? 'Undo — Mark Incomplete' : '✓ Mark Discovery Complete'}
-                </button>
-              </div>
-            )}
+            {/* Tab: Nearby — nearest active clients, to name on the call */}
+            {rightTab === 'Nearby' && <NearbyClients client={client} />}
 
             {rightTab === 'Client' && (
               <ClientTab client={client} />

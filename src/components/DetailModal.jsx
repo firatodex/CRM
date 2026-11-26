@@ -263,7 +263,7 @@ function NearbyClients({ client }) {
         </div>
       ))}
 
-      <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>Straight-line distance from town in the PM Surya Ghar address. “~” = district-level estimate.</div>
+      <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>Straight-line distance between office addresses (PM Surya Ghar portal). “~” = no town in the address, district estimate.</div>
     </div>
   )
 }

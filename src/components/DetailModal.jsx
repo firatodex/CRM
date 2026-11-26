@@ -161,7 +161,6 @@ function DistrictField({ client, value, onChange }) {
   const [territory, setTerritory] = useState(null)
   useEffect(() => { loadTerritory().then(setTerritory).catch(() => {}) }, [])
   const auto = territory?.districtOf?.[client.id]?.how === 'portal' ? territory.districtOf[client.id].district : null
-  const district = value || auto
   return (
     <div className="field-row">
       <div className="field">
@@ -171,20 +170,7 @@ function DistrictField({ client, value, onChange }) {
           {GUJARAT_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
       </div>
-      <div className="field" style={{ justifyContent: 'flex-end' }}>
-        {district && territory && (
-          <div style={{ fontSize: 12, color: 'var(--text-light)', paddingBottom: 8 }}>
-            {(() => {
-              const n = Object.entries(territory.districtOf)
-                .filter(([id, d]) => id !== client.id && d.district === district && d.stage === 'active').length
-              return n > 0
-                ? <span><b style={{ color: '#16A34A' }}>{n} active client{n > 1 ? 's' : ''}</b> in {district} · </span>
-                : <span>No active clients in {district} yet · </span>
-            })()}
-            {Number(territory.market[district]?.vendors || 0).toLocaleString('en-IN')} EPCs
-          </div>
-        )}
-      </div>
+      <div className="field" />
     </div>
   )
 }
@@ -198,7 +184,7 @@ function NearbyClients({ client }) {
   useEffect(() => {
     let alive = true
     setRows(null); setError(null)
-    supabase.rpc('nearby_clients', { p_client: client.id, p_limit: 8 }).then(({ data, error }) => {
+    supabase.rpc('nearby_clients', { p_client: client.id, p_limit: 60 }).then(({ data, error }) => {
       if (!alive) return
       if (error) setError(error.message); else setRows(data || [])
     })
@@ -226,6 +212,24 @@ function NearbyClients({ client }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto', paddingRight: 2 }}>
+      {(() => {
+        const pool = (rows || []).filter(r => !appOnly || isApp(r))
+        const within = d => pool.filter(r => Number(r.km) <= d).length
+        const stat = (n, label) => (
+          <div style={{ flex: 1, background: 'var(--bg-white)', border: '1px solid var(--border-light)', borderRadius: 8, padding: '8px 10px' }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: n > 0 ? '#16A34A' : 'var(--text-muted)', lineHeight: 1.1 }}>{n}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>{label}</div>
+          </div>
+        )
+        const who = appOnly ? 'app users' : 'clients'
+        return (
+          <div style={{ display: 'flex', gap: 8 }}>
+            {stat(within(50), `${who} within 50 km`)}
+            {stat(within(100), `${who} within 100 km`)}
+          </div>
+        )
+      })()}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 11.5, color: 'var(--text-light)' }}>Nearest Dyzen clients</span>
         <label style={{ fontSize: 11.5, color: 'var(--text-light)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>

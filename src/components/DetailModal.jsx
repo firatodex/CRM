@@ -205,10 +205,10 @@ function NearbyClients({ client }) {
     return () => { alive = false }
   }, [client.id])
 
-  const isApp = r => /crm|opscraft|software|inventory|lms/i.test(r.products || '')
+  const isApp = r => r.app_user ?? /crm|opscraft|software|inventory|lms/i.test(r.products || '')
   const list = (rows || []).filter(r => !appOnly || isApp(r)).slice(0, 6)
   const title = c => (c.company || c.name || '').toLowerCase().replace(/\b\w/g, m => m.toUpperCase())
-  const km = r => `${r.accuracy === 'town' ? '' : '~'}${r.km} km`
+  const km = r => (Number(r.km) < 3 && r.accuracy === 'town') ? 'Same city' : `${r.accuracy === 'town' ? '' : '~'}${r.km} km`
   const pitch = list.slice(0, 3).map(r => `${title(r)} (${r.place})`).join(', ')
   const copyPitch = async () => {
     const text = `EPCs near you like ${pitch} already work with us.`
@@ -256,7 +256,7 @@ function NearbyClients({ client }) {
               <span>{r.place}{r.won_at && <> · since {new Date(r.won_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</>}</span>
               {isApp(r)
                 ? <span style={{ fontSize: 10.5, fontWeight: 700, color: '#16A34A', background: '#E8F9EE', borderRadius: 4, padding: '0 5px' }}>✓ App user</span>
-                : <span style={{ fontSize: 10.5, color: 'var(--text-muted)', background: 'var(--bg-light)', borderRadius: 4, padding: '0 5px' }}>{r.products || 'Product not recorded'}</span>}
+                : <span style={{ fontSize: 10.5, color: 'var(--text-muted)', background: 'var(--bg-light)', borderRadius: 4, padding: '0 5px' }}>{r.products || 'Not marked as app user'}</span>}
             </div>
           </div>
           <span style={{ fontSize: 15, fontWeight: 700, color: i === 0 ? '#16A34A' : 'var(--text-body)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{km(r)}</span>

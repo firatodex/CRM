@@ -272,6 +272,13 @@ function NearbyClients({ client }) {
   )
 }
 
+const DEBRIEF_FIELDS = [
+  { n: 1, key: 'wanted', hint: 'What I wanted from this call' },
+  { n: 2, key: 'got',    hint: 'What I got (+ what DIDN’T happen)' },
+  { n: 3, key: 'why',    hint: 'One cause, in their words' },
+  { n: 4, key: 'next',   hint: 'One rule for next time' },
+]
+
 const LOG_METHODS = ['Phone call', 'WhatsApp', 'Email', 'In person']
 
 // Which of the lead's numbers was dialed (shown when a lead has more than one number)
@@ -320,6 +327,8 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
   const [form, setForm] = useState({ ...client })
   const [logMethod, setLogMethod] = useState(getLastMethod)
   const [logWhatHappened, setLogWhatHappened] = useState('')
+  // Post-call debrief (hot/warm contacted & proposal leads) — saved as numbered lines at the top of the log
+  const [debrief, setDebrief] = useState({ wanted: '', got: '', why: '', next: '' })
   const [logProgress, setLogProgress] = useState(false)
   const [logWhatNext, setLogWhatNext]         = useState('')
   const [logDue, setLogDue]                   = useState('')
@@ -397,7 +406,12 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
     return a !== b
   }), [form, client])
 
-  const hasLog = logWhatHappened.trim().length > 0
+  const showDebrief = ['contacted', 'proposal'].includes(form.stage) && ['hot', 'warm'].includes(form.temperature)
+  const debriefText = showDebrief
+    ? DEBRIEF_FIELDS.filter(f => debrief[f.key].trim()).map(f => `${f.n} ${f.key}: ${debrief[f.key].trim()}`).join('\n')
+    : ''
+  const fullLogNote = [debriefText, logWhatHappened.trim()].filter(Boolean).join('\n\n')
+  const hasLog = fullLogNote.length > 0
 
   function set(key, val) { setForm(f => ({ ...f, [key]: val })) }
 
@@ -406,7 +420,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
 
   // Unified save: saves contact fields + log entry (if What happened has text)
   const handleSave = useCallback(async () => {
-    const hasLog = logWhatHappened.trim().length > 0
+    const hasLog = fullLogNote.length > 0
 
     // Build post-log field updates
     const postUpdates = {}
@@ -431,7 +445,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
     // Field save carries postUpdates merged in so there's only ONE clients write.
     const tasks = []
     if (isDirty || hasLog) tasks.push(onSave(mergedForm))
-    if (hasLog) tasks.push(onLogContact(client.id, logMethod, logWhatHappened.trim(), logWhatNext.trim() || null, logProgress,
+    if (hasLog) tasks.push(onLogContact(client.id, logMethod, fullLogNote, logWhatNext.trim() || null, logProgress,
       logMethod === 'Phone call' ? effectiveDialed : null))
 
     try {
@@ -449,7 +463,7 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
     }
 
     onClose()
-  }, [form, isDirty, logWhatHappened, logWhatNext, logDue, logTime, logMethod, logProgress, effectiveDialed, onSave, onPostLogUpdate, onLogContact, onClose, client])
+  }, [form, isDirty, fullLogNote, logWhatNext, logDue, logTime, logMethod, logProgress, effectiveDialed, onSave, onPostLogUpdate, onLogContact, onClose, client])
 
   useEffect(() => {
     function handleKey(e) {
@@ -846,6 +860,20 @@ export default function DetailModal({ client, contactLogs, tasks = [], onSave, o
 
                     {logMethod === 'Phone call' && (
                       <DialedPicker numbers={dialNumbers} value={effectiveDialed} onChange={setDialedPhone} />
+                    )}
+
+                    {showDebrief && (
+                      <div style={{ marginTop: 10, padding: '10px 12px', background: 'var(--bg-light)', borderRadius: 8, borderLeft: '3px solid var(--primary)' }}>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--primary)', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 6 }}>After-call debrief</div>
+                        {DEBRIEF_FIELDS.map(f => (
+                          <div key={f.key} style={{ display: 'grid', gridTemplateColumns: '82px 1fr', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-body)', fontFamily: 'ui-monospace, Menlo, monospace', whiteSpace: 'nowrap' }}>{f.n} {f.key}:</span>
+                            <input value={debrief[f.key]} placeholder={f.hint}
+                              onChange={e => setDebrief(d => ({ ...d, [f.key]: e.target.value }))}
+                              style={{ fontSize: 12.5, padding: '5px 8px' }} />
+                          </div>
+                        ))}
+                      </div>
                     )}
 
                     <div className="field" style={{ marginTop: 10 }}>
